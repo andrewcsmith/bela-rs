@@ -38,7 +38,7 @@ pub struct Bela<T> {
     user_data: T,
 }
 
-pub unsafe extern "C" fn render_trampoline<'a, T>(context: *mut BelaContext, user_data: *mut std::os::raw::c_void) 
+unsafe extern "C" fn render_trampoline<'a, T>(context: *mut BelaContext, user_data: *mut std::os::raw::c_void) 
 where T: UserData<'a> + 'a
 {
     let mut context = Context::new(context);
@@ -46,7 +46,7 @@ where T: UserData<'a> + 'a
     user_data.render_fn()(&mut context, user_data);
 }
 
-pub unsafe extern "C" fn setup_trampoline<'a, T>(context: *mut BelaContext, user_data: *mut std::os::raw::c_void) -> bool
+unsafe extern "C" fn setup_trampoline<'a, T>(context: *mut BelaContext, user_data: *mut std::os::raw::c_void) -> bool
 where T: UserData<'a> + 'a
 {
     let mut context = Context::new(context);
@@ -65,7 +65,7 @@ where T: UserData<'a> + 'a
     }
 }
 
-pub unsafe extern "C" fn cleanup_trampoline<'a, T>(context: *mut BelaContext, user_data: *mut std::os::raw::c_void)
+unsafe extern "C" fn cleanup_trampoline<'a, T>(context: *mut BelaContext, user_data: *mut std::os::raw::c_void)
 where T: UserData<'a> + 'a
 {
     let mut context = Context::new(context);
