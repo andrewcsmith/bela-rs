@@ -46,6 +46,36 @@ where T: UserData<'a> + 'a
     user_data.render_fn()(&mut context, user_data);
 }
 
+pub unsafe extern "C" fn setup_trampoline<'a, T>(context: *mut BelaContext, user_data: *mut std::os::raw::c_void) -> bool
+where T: UserData<'a> + 'a
+{
+    let mut context = Context::new(context);
+    let user_data: &mut T = mem::transmute(user_data);
+    match user_data.setup_fn() {
+        Some(func) => {
+            match func(&mut context, user_data) {
+                Ok(_) => true,
+                Err(_) => false,
+            }
+        }
+        None => {
+            // Default to "success" if there's no function
+            true
+        }
+    }
+}
+
+pub unsafe extern "C" fn cleanup_trampoline<'a, T>(context: *mut BelaContext, user_data: *mut std::os::raw::c_void)
+where T: UserData<'a> + 'a
+{
+    let mut context = Context::new(context);
+    let user_data: &mut T = mem::transmute(user_data);
+    match user_data.cleanup_fn() {
+        Some(func) => { func(&mut context, user_data); }, 
+        None => { }
+    }
+}
+
 impl<'a, T: UserData<'a> + 'a> Bela<T> {
     pub fn new(user_data: T) -> Self {
         Bela {
@@ -61,8 +91,24 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
         self.user_data.set_render_fn(func);
     }
 
+    pub fn set_setup<F: 'a>(&mut self, func: &'a F) 
+    where F: Fn(&mut Context, T) -> bool,
+          for<'r, 's> F: Fn(&'r mut Context, &'s mut T) -> Result<(), error::Error>
+    {
+        self.user_data.set_setup_fn(Some(func));
+    }
+
+    pub fn set_cleanup<F: 'a>(&mut self, func: &'a F) 
+    where F: Fn(&mut Context, T),
+          for<'r, 's> F: Fn(&'r mut Context, &'s mut T)
+    {
+        self.user_data.set_cleanup_fn(Some(func));
+    }
+
     pub fn init_audio(&mut self, settings: &mut InitSettings) -> Result<(), error::Error> {
+        settings.settings.setup = Some(setup_trampoline::<T>);
         settings.settings.render = Some(render_trampoline::<T>);
+        settings.settings.cleanup = Some(cleanup_trampoline::<T>);
         let out = unsafe {
             let ptr: *mut std::os::raw::c_void = mem::transmute(&mut self.user_data);
             bela_sys::Bela_initAudio(settings.settings_ptr(), ptr)
@@ -127,10 +173,10 @@ impl Context {
     /// Access the audio output slice
     pub fn audio_out(&mut self) -> &mut [f32] {
         unsafe {
-            let mut context = self.context_ptr();
+            let context = self.context_ptr();
             let n_frames = (*context).audioFrames;
             let n_channels = (*context).audioOutChannels;
-            let audio_out_ptr: *mut f32 = (*context).audioOut as *mut f32;
+            let audio_out_ptr = (*context).audioOut as *mut f32;
             slice::from_raw_parts_mut(audio_out_ptr, (n_frames * n_channels) as usize)
         }
     }
@@ -139,6 +185,10 @@ impl Context {
 pub trait UserData<'a> {
     fn render_fn(&self) -> &'a Fn(&mut Context, &mut Self);
     fn set_render_fn(&mut self, &'a Fn(&mut Context, &mut Self));
+    fn setup_fn(&self) -> Option<&'a Fn(&mut Context, &mut Self) -> Result<(), error::Error>>;
+    fn set_setup_fn(&mut self, Option<&'a Fn(&mut Context, &mut Self) -> Result<(), error::Error>>);
+    fn cleanup_fn(&self) -> Option<&'a Fn(&mut Context, &mut Self)>;
+    fn set_cleanup_fn(&mut self, Option<&'a Fn(&mut Context, &mut Self)>);
 }
 
 /// Safe wrapper for `BelaInitSettings`, which sets initial parameters for the
