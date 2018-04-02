@@ -3,7 +3,7 @@ extern crate libc;
 extern crate bela_sys;
 
 use bela_sys::{BelaInitSettings, BelaContext};
-use std::mem;
+use std::{mem, slice};
 
 pub mod error;
 
@@ -122,6 +122,17 @@ impl Context {
     pub fn context_ptr(&mut self) -> *mut BelaContext {
         let ptr: *mut BelaContext = self.context;
         ptr
+    }
+
+    /// Access the audio output slice
+    pub fn audio_out(&mut self) -> &mut [f32] {
+        unsafe {
+            let mut context = self.context_ptr();
+            let n_frames = (*context).audioFrames;
+            let n_channels = (*context).audioOutChannels;
+            let audio_out_ptr: *mut f32 = (*context).audioOut as *mut f32;
+            slice::from_raw_parts_mut(audio_out_ptr, (n_frames * n_channels) as usize)
+        }
     }
 }
 

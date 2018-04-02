@@ -1,10 +1,11 @@
 extern crate bela;
 
-use std::{thread, time, slice};
+use std::{thread, time};
 use bela::*;
 
 struct AppData<'a> {
     render: &'a Fn(&mut Context, &mut AppData<'a>),
+    frame_index: usize,
 }
 
 impl<'a> UserData<'a> for AppData<'a> {
@@ -22,23 +23,26 @@ fn main() {
 }
 
 fn go() -> Result<(), error::Error> {
-    let render = |context: &mut Context, _user_data: &mut AppData| {
-        unsafe {
-            let context = context.context_ptr();
-            let n_frames = (*context).audioFrames;
-            let n_channels = (*context).audioOutChannels;
+    // Generates a sawtooth wave with the period of whatever the audio frame
+    // size is.
+    let render = |context: &mut Context, user_data: &mut AppData| {
+        let AppData {
+            frame_index,
+            ..
+        } = user_data;
 
-            let audio_out: &mut [f32] = slice::from_raw_parts_mut((*context).audioOut as *mut f32, (n_frames * n_channels) as usize);
-
-            let len = audio_out.len();
-            for (idx, samp) in audio_out.iter_mut().enumerate() {
-                *samp = idx as f32 / len as f32;
-            }
+        let len = context.audio_out().len();
+        for (idx, samp) in context.audio_out().iter_mut().enumerate() {
+            *samp = (idx as f32 / len as f32) * (*frame_index % 10) as f32;
         }
+
+        // We want to keep track of the frame index here
+        *frame_index = frame_index.wrapping_add(1);
     };
 
     let user_data = AppData {
-        render: &render
+        render: &render,
+        frame_index: 0,
     };
 
     let mut bela_app: Bela<AppData> = Bela::new(user_data);
