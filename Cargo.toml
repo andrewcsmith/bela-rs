@@ -6,6 +6,7 @@ authors = ["Andrew C. Smith <andrewchristophersmith@gmail.com>"]
 [dependencies]
 libc = "0.2"
 nix = "0.10"
+sample = "0.9"
 
 [dependencies.bela-sys]
 git = "https://github.com/andrewcsmith/bela-sys.git"

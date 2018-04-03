@@ -180,6 +180,18 @@ impl Context {
             slice::from_raw_parts_mut(audio_out_ptr, (n_frames * n_channels) as usize)
         }
     }
+
+    pub fn audio_frames(&self) -> usize {
+        unsafe {
+            (*self.context).audioFrames as usize
+        }
+    }
+
+    pub fn audio_out_channels(&self) -> usize {
+        unsafe {
+            (*self.context).audioOutChannels as usize
+        }
+    }
 }
 
 pub trait UserData<'a> {
