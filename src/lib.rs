@@ -4,6 +4,7 @@ extern crate bela_sys;
 
 use bela_sys::{BelaInitSettings, BelaContext};
 use std::{mem, slice};
+use std::marker::PhantomData;
 
 pub mod error;
 
@@ -43,7 +44,7 @@ where T: UserData<'a> + 'a
 {
     let mut context = Context::new(context);
     let user_data: &mut T = mem::transmute(user_data);
-    user_data.render_fn()(&mut context, user_data);
+    user_data.render_fn(&mut context);
 }
 
 unsafe extern "C" fn setup_trampoline<'a, T>(context: *mut BelaContext, user_data: *mut std::os::raw::c_void) -> bool
@@ -51,17 +52,9 @@ where T: UserData<'a> + 'a
 {
     let mut context = Context::new(context);
     let user_data: &mut T = mem::transmute(user_data);
-    match user_data.setup_fn() {
-        Some(func) => {
-            match func(&mut context, user_data) {
-                Ok(_) => true,
-                Err(_) => false,
-            }
-        }
-        None => {
-            // Default to "success" if there's no function
-            true
-        }
+    match user_data.setup_fn(&mut context) {
+        Ok(_) => true,
+        Err(_) => false,
     }
 }
 
@@ -70,10 +63,7 @@ where T: UserData<'a> + 'a
 {
     let mut context = Context::new(context);
     let user_data: &mut T = mem::transmute(user_data);
-    match user_data.cleanup_fn() {
-        Some(func) => { func(&mut context, user_data); }, 
-        None => { }
-    }
+    user_data.cleanup_fn(&mut context);
 }
 
 /// The "args" here must include the actual auxiliary task callback!
@@ -92,7 +82,7 @@ where T: Auxiliary
 /// this is so that we can capture outer variables in the closure, and also
 /// mutate state if we need to in a type-safe way.  
 pub trait Auxiliary {
-    type Args;
+    type Args: ?Sized;
 
     /// `destructure` should split the Auxiliary into the closure and its
     /// arguments. This is called by the `unsafe extern` trampoline function to
@@ -100,7 +90,17 @@ pub trait Auxiliary {
     fn destructure(&mut self) -> (&mut FnMut(&mut Self::Args), &mut Self::Args);
 }
 
-pub struct CreatedTask(bela_sys::AuxiliaryTask);
+impl<T> Auxiliary for Box<T>
+where T: Auxiliary + ?Sized
+{
+    type Args = T::Args;
+
+    fn destructure(&mut self) -> (&mut FnMut(&mut Self::Args), &mut Self::Args) {
+        T::destructure(self)
+    }
+}
+
+pub struct CreatedTask<'a>(bela_sys::AuxiliaryTask, PhantomData<&'a mut ()>);
 
 impl<'a, T: UserData<'a> + 'a> Bela<T> {
     pub fn new(user_data: T) -> Self {
@@ -110,23 +110,23 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
         }
     }
 
-    pub fn set_render<F: 'a>(&mut self, func: &'a F) 
-    where F: Fn(&mut Context, T),
-          for<'r, 's> F: Fn(&'r mut Context, &'s mut T)
+    pub fn set_render<F: 'a>(&mut self, func: &'a mut F) 
+    where F: FnMut(&mut Context, T::Data),
+          for<'r, 's> F: FnMut(&'r mut Context, &'s mut T::Data)
     {
         self.user_data.set_render_fn(func);
     }
 
-    pub fn set_setup<F: 'a>(&mut self, func: &'a F) 
-    where F: Fn(&mut Context, T) -> bool,
-          for<'r, 's> F: Fn(&'r mut Context, &'s mut T) -> Result<(), error::Error>
+    pub fn set_setup<F: 'a>(&mut self, func: &'a mut F) 
+    where F: FnMut(&mut Context, T::Data) -> bool,
+          for<'r, 's> F: FnMut(&'r mut Context, &'s mut T::Data) -> Result<(), error::Error>
     {
         self.user_data.set_setup_fn(Some(func));
     }
 
-    pub fn set_cleanup<F: 'a>(&mut self, func: &'a F) 
-    where F: Fn(&mut Context, T),
-          for<'r, 's> F: Fn(&'r mut Context, &'s mut T)
+    pub fn set_cleanup<F: 'a>(&mut self, func: &'a mut F) 
+    where F: FnMut(&mut Context, T::Data),
+          for<'r, 's> F: FnMut(&'r mut Context, &'s mut T::Data)
     {
         self.user_data.set_cleanup_fn(Some(func));
     }
@@ -170,22 +170,32 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
         }
     }
 
-    pub fn create_auxiliary_task<A>(task: &A, priority: i32, name: &'static str) -> CreatedTask
+    /// Takes a _mutable reference_ to the task, because we must be ensured that
+    /// the task is unique and that it does not move.
+    /// 
+    /// I highly recommend ONLY USING STACK-ALLOCATED CLOSURES AS TASKS. This
+    /// particular implementation is wildly unsafe, but if you use a stack
+    /// closure it _should_ be possible to avoid a segfault. See the
+    /// auxiliary_task example for a demo.
+    pub fn create_auxiliary_task<'b, A>(task: &'a mut A, priority: i32, name: &'static str) -> CreatedTask<'b>
     where A: Auxiliary
     {
+        let task_ptr = task as *const _ as *mut std::os::raw::c_void;
+
         let aux_task = unsafe {
             bela_sys::Bela_createAuxiliaryTask(
                 Some(auxiliary_task_trampoline::<A>),
                 priority,
                 name.as_bytes().as_ptr(),
-                mem::transmute(task),
+                task_ptr,
             )
         };
 
-        CreatedTask(aux_task)
+        CreatedTask(aux_task, PhantomData)
     }
 
-    pub fn schedule_auxiliary_task(task: &CreatedTask) -> Result<(), error::Error> {
+    pub fn schedule_auxiliary_task(task: &CreatedTask) -> Result<(), error::Error> 
+    {
         let res = unsafe {
             bela_sys::Bela_scheduleAuxiliaryTask(task.0)
         };
@@ -250,12 +260,14 @@ impl Context {
 }
 
 pub trait UserData<'a> {
-    fn render_fn(&self) -> &'a Fn(&mut Context, &mut Self);
-    fn set_render_fn(&mut self, &'a Fn(&mut Context, &mut Self));
-    fn setup_fn(&self) -> Option<&'a Fn(&mut Context, &mut Self) -> Result<(), error::Error>>;
-    fn set_setup_fn(&mut self, Option<&'a Fn(&mut Context, &mut Self) -> Result<(), error::Error>>);
-    fn cleanup_fn(&self) -> Option<&'a Fn(&mut Context, &mut Self)>;
-    fn set_cleanup_fn(&mut self, Option<&'a Fn(&mut Context, &mut Self)>);
+    type Data;
+
+    fn render_fn(&mut self, &mut Context);
+    fn set_render_fn(&mut self, &'a mut FnMut(&mut Context, &mut Self::Data));
+    fn setup_fn(&mut self, &mut Context) -> Result<(), error::Error>;
+    fn set_setup_fn(&mut self, Option<&'a mut FnMut(&mut Context, &mut Self::Data) -> Result<(), error::Error>>);
+    fn cleanup_fn(&mut self, &mut Context);
+    fn set_cleanup_fn(&mut self, Option<&'a mut FnMut(&mut Context, &mut Self::Data)>);
 }
 
 /// Safe wrapper for `BelaInitSettings`, which sets initial parameters for the

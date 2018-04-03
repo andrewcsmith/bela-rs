@@ -6,7 +6,6 @@ extern crate sample;
 
 use std::{thread, time};
 use bela::*;
-use sample::{Signal, Sample};
 
 #[derive(Clone)]
 struct PrintTask<F> {
@@ -30,37 +29,66 @@ where F: FnMut(&mut String),
     }
 }
 
-struct AppData<'a> {
-    render: &'a Fn(&mut Context, &mut AppData<'a>),
-    setup: Option<&'a Fn(&mut Context, &mut AppData<'a>) -> Result<(), error::Error>>,
-    cleanup: Option<&'a Fn(&mut Context, &mut AppData<'a>)>,
-    synth: Option<Box<Signal<Frame=[f64; 1]>>>,
+struct MyData<'a> {
     frame_index: usize,
-    tasks: Vec<CreatedTask>,
+    tasks: Vec<CreatedTask<'a>>
+}
+
+struct AppData<'a> {
+    render: &'a mut FnMut(&mut Context, &mut MyData<'a>),
+    setup: Option<&'a mut FnMut(&mut Context, &mut MyData<'a>) -> Result<(), error::Error>>,
+    cleanup: Option<&'a mut FnMut(&mut Context, &mut MyData<'a>)>,
+    data: MyData<'a>,
 }
 
 impl<'a> UserData<'a> for AppData<'a> {
-    fn render_fn(&self) -> &'a Fn(&mut Context, &mut AppData<'a>) {
-        self.render
+    type Data = MyData<'a>;
+
+    fn render_fn(&mut self, context: &mut Context) {
+        let AppData {
+            render,
+            data,
+            ..
+        } = self;
+
+        render(context, data)
     }
 
-    fn set_render_fn(&mut self, callback: &'a (Fn(&mut Context, &mut AppData<'a>) + 'a)) {
+    fn set_render_fn(&mut self, callback: &'a mut (FnMut(&mut Context, &mut MyData<'a>) + 'a)) {
         self.render = callback;
     }
 
-    fn setup_fn(&self) -> Option<&'a Fn(&mut Context, &mut AppData<'a>) -> Result<(), error::Error>> {
-        self.setup
+    fn setup_fn(&mut self, context: &mut Context) -> Result<(), error::Error> {
+        let AppData {
+            setup,
+            data,
+            ..
+        } = self;
+
+        match setup {
+            Some(f) => f(context, data),
+            None => Ok(()),
+        }
     }
 
-    fn set_setup_fn(&mut self, callback: Option<&'a (Fn(&mut Context, &mut AppData<'a>) -> Result<(), error::Error> + 'a)>) {
+    fn set_setup_fn(&mut self, callback: Option<&'a mut (FnMut(&mut Context, &mut MyData<'a>) -> Result<(), error::Error> + 'a)>) {
         self.setup = callback;
     }
 
-    fn cleanup_fn(&self) -> Option<&'a Fn(&mut Context, &mut AppData<'a>)> {
-        self.cleanup
+    fn cleanup_fn(&mut self, context: &mut Context) {
+        let AppData {
+            cleanup,
+            data,
+            ..
+        } = self;
+
+        match cleanup {
+            Some(f) => f(context, data),
+            None => (),
+        };
     }
 
-    fn set_cleanup_fn(&mut self, callback: Option<&'a (Fn(&mut Context, &mut AppData<'a>) + 'a)>) {
+    fn set_cleanup_fn(&mut self, callback: Option<&'a mut (FnMut(&mut Context, &mut MyData<'a>) + 'a)>) {
         self.cleanup = callback;
     }
 }
@@ -81,37 +109,27 @@ fn go() -> Result<(), error::Error> {
         args: what_to_print,
     };
 
-    let setup = |_context: &mut Context, user_data: &mut AppData| -> Result<(), error::Error> {
+    let more_to_print = "this is another string".to_string();
+    let mut another_print_task = PrintTask {
+        callback: |args: &mut String| {
+            args.push_str("LOL");
+            println!("{}", args);
+        },
+        args: more_to_print,
+    };
+
+    let mut setup = |_context: &mut Context, user_data: &mut MyData| -> Result<(), error::Error> {
         println!("Setting up");
-        user_data.tasks.push(BelaApp::create_auxiliary_task(&print_task, 10, "printing_stuff"));
+        user_data.tasks.push(BelaApp::create_auxiliary_task(&mut print_task, 10, "printing_stuff"));
+        user_data.tasks.push(BelaApp::create_auxiliary_task(&mut another_print_task, 10, "printing_more_stuff"));
         Ok(())
     };
 
-    let cleanup = |_context: &mut Context, _user_data: &mut AppData| {
+    let mut cleanup = |_context: &mut Context, _user_data: &mut MyData| {
         println!("Cleaning up");
     };
 
-    // Generates a sawtooth wave with the period of whatever the audio frame
-    // size is.
-    let render = |context: &mut Context, user_data: &mut AppData| {
-        let AppData {
-            ref mut synth,
-            ..
-        } = *user_data;
-
-        let audio_frames = context.audio_frames();
-        let audio_out_channels = context.audio_out_channels();
-        let audio_out = context.audio_out();
-        assert_eq!(audio_out_channels, 2);
-        let audio_out_frames: &mut [[f32; 2]] = sample::slice::to_frame_slice_mut(audio_out).unwrap();
-
-        for frame in audio_out_frames.iter_mut() {
-            let val = synth.as_mut().unwrap().next();
-            for samp in frame.iter_mut() {
-                *samp = val[0] as f32;
-            }
-        }
-
+    let mut render = |_context: &mut Context, user_data: &mut MyData| {
         if user_data.frame_index % 1024 == 0 {
             for task in user_data.tasks.iter() {
                 BelaApp::schedule_auxiliary_task(task);
@@ -121,17 +139,16 @@ fn go() -> Result<(), error::Error> {
         user_data.frame_index = user_data.frame_index.wrapping_add(1);
     };
 
-    let sig = sample::signal::rate(44_100.0)
-        .const_hz(440.0)
-        .sine();
+    let my_data = MyData {
+        tasks: Vec::new(),
+        frame_index: 0,
+    };
 
     let user_data = AppData {
-        render: &render,
-        setup: Some(&setup),
-        cleanup: Some(&cleanup),
-        synth: Some(Box::new(sig)),
-        frame_index: 0,
-        tasks: Vec::new(),
+        render: &mut render,
+        setup: Some(&mut setup),
+        cleanup: Some(&mut cleanup),
+        data: my_data,
     };
 
     let mut bela_app: Bela<AppData> = Bela::new(user_data);
