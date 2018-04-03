@@ -34,66 +34,7 @@ struct MyData<'a> {
     tasks: Vec<CreatedTask<'a>>
 }
 
-struct AppData<'a> {
-    render: &'a mut FnMut(&mut Context, &mut MyData<'a>),
-    setup: Option<&'a mut FnMut(&mut Context, &mut MyData<'a>) -> Result<(), error::Error>>,
-    cleanup: Option<&'a mut FnMut(&mut Context, &mut MyData<'a>)>,
-    data: MyData<'a>,
-}
-
-impl<'a> UserData<'a> for AppData<'a> {
-    type Data = MyData<'a>;
-
-    fn render_fn(&mut self, context: &mut Context) {
-        let AppData {
-            render,
-            data,
-            ..
-        } = self;
-
-        render(context, data)
-    }
-
-    fn set_render_fn(&mut self, callback: &'a mut (FnMut(&mut Context, &mut MyData<'a>) + 'a)) {
-        self.render = callback;
-    }
-
-    fn setup_fn(&mut self, context: &mut Context) -> Result<(), error::Error> {
-        let AppData {
-            setup,
-            data,
-            ..
-        } = self;
-
-        match setup {
-            Some(f) => f(context, data),
-            None => Ok(()),
-        }
-    }
-
-    fn set_setup_fn(&mut self, callback: Option<&'a mut (FnMut(&mut Context, &mut MyData<'a>) -> Result<(), error::Error> + 'a)>) {
-        self.setup = callback;
-    }
-
-    fn cleanup_fn(&mut self, context: &mut Context) {
-        let AppData {
-            cleanup,
-            data,
-            ..
-        } = self;
-
-        match cleanup {
-            Some(f) => f(context, data),
-            None => (),
-        };
-    }
-
-    fn set_cleanup_fn(&mut self, callback: Option<&'a mut (FnMut(&mut Context, &mut MyData<'a>) + 'a)>) {
-        self.cleanup = callback;
-    }
-}
-
-type BelaApp<'a> = Bela<AppData<'a>>;
+type BelaApp<'a> = Bela<AppData<'a, MyData<'a>>>;
 
 fn main() {
     go().unwrap();
@@ -101,7 +42,7 @@ fn main() {
 
 fn go() -> Result<(), error::Error> {
     let what_to_print = "this is a string".to_string();
-    let mut print_task = PrintTask {
+    let print_task = PrintTask {
         callback: |args: &mut String| {
             args.push_str("LOL");
             println!("{}", args);
@@ -118,9 +59,11 @@ fn go() -> Result<(), error::Error> {
         args: more_to_print,
     };
 
+    let mut boxed = Box::new(print_task);
+
     let mut setup = |_context: &mut Context, user_data: &mut MyData| -> Result<(), error::Error> {
         println!("Setting up");
-        user_data.tasks.push(BelaApp::create_auxiliary_task(&mut print_task, 10, "printing_stuff"));
+        user_data.tasks.push(BelaApp::create_auxiliary_task(&mut boxed, 10, "printing_stuff"));
         user_data.tasks.push(BelaApp::create_auxiliary_task(&mut another_print_task, 10, "printing_more_stuff"));
         Ok(())
     };
@@ -144,14 +87,9 @@ fn go() -> Result<(), error::Error> {
         frame_index: 0,
     };
 
-    let user_data = AppData {
-        render: &mut render,
-        setup: Some(&mut setup),
-        cleanup: Some(&mut cleanup),
-        data: my_data,
-    };
+    let user_data = AppData::new(my_data, &mut render, Some(&mut setup), Some(&mut cleanup));
 
-    let mut bela_app: Bela<AppData> = Bela::new(user_data);
+    let mut bela_app: Bela<AppData<MyData>> = Bela::new(user_data);
     let mut settings = InitSettings::default();
     bela_app.init_audio(&mut settings)?;
     bela_app.start_audio()?;

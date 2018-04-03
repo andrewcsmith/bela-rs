@@ -177,7 +177,7 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
     /// particular implementation is wildly unsafe, but if you use a stack
     /// closure it _should_ be possible to avoid a segfault. See the
     /// auxiliary_task example for a demo.
-    pub fn create_auxiliary_task<'b, A>(task: &'a mut A, priority: i32, name: &'static str) -> CreatedTask<'b>
+    pub fn create_auxiliary_task<'b, 'c, A: 'b>(task: &'c mut A, priority: i32, name: &'static str) -> CreatedTask<'b>
     where A: Auxiliary
     {
         let task_ptr = task as *const _ as *mut std::os::raw::c_void;
@@ -268,6 +268,80 @@ pub trait UserData<'a> {
     fn set_setup_fn(&mut self, Option<&'a mut FnMut(&mut Context, &mut Self::Data) -> Result<(), error::Error>>);
     fn cleanup_fn(&mut self, &mut Context);
     fn set_cleanup_fn(&mut self, Option<&'a mut FnMut(&mut Context, &mut Self::Data)>);
+}
+
+pub struct AppData<'a, D: 'a> {
+    pub data: D,
+    render: &'a mut FnMut(&mut Context, &mut D),
+    setup: Option<&'a mut FnMut(&mut Context, &mut D) -> Result<(), error::Error>>,
+    cleanup: Option<&'a mut FnMut(&mut Context, &mut D)>,
+}
+
+impl<'a, D> AppData<'a, D> {
+    pub fn new(data: D, 
+        render: &'a mut FnMut(&mut Context, &mut D), 
+        setup: Option<&'a mut FnMut(&mut Context, &mut D) -> Result<(), error::Error>>, 
+        cleanup: Option<&'a mut FnMut(&mut Context, &mut D)>) -> AppData<'a, D> 
+    {
+        AppData {
+            data,
+            render,
+            setup,
+            cleanup,
+        }
+    }
+}
+
+impl<'a, D> UserData<'a> for AppData<'a, D> {
+    type Data = D;
+
+    fn render_fn(&mut self, context: &mut Context) {
+        let AppData {
+            render,
+            data,
+            ..
+        } = self;
+
+        render(context, data)
+    }
+
+    fn set_render_fn(&mut self, callback: &'a mut (FnMut(&mut Context, &mut D) + 'a)) {
+        self.render = callback;
+    }
+
+    fn setup_fn(&mut self, context: &mut Context) -> Result<(), error::Error> {
+        let AppData {
+            setup,
+            data,
+            ..
+        } = self;
+
+        match setup {
+            Some(f) => f(context, data),
+            None => Ok(()),
+        }
+    }
+
+    fn set_setup_fn(&mut self, callback: Option<&'a mut (FnMut(&mut Context, &mut D) -> Result<(), error::Error> + 'a)>) {
+        self.setup = callback;
+    }
+
+    fn cleanup_fn(&mut self, context: &mut Context) {
+        let AppData {
+            cleanup,
+            data,
+            ..
+        } = self;
+
+        match cleanup {
+            Some(f) => f(context, data),
+            None => (),
+        };
+    }
+
+    fn set_cleanup_fn(&mut self, callback: Option<&'a mut (FnMut(&mut Context, &mut D) + 'a)>) {
+        self.cleanup = callback;
+    }
 }
 
 /// Safe wrapper for `BelaInitSettings`, which sets initial parameters for the
