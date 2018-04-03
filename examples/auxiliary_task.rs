@@ -8,6 +8,7 @@ use std::{thread, time};
 use bela::*;
 use sample::{Signal, Sample};
 
+#[derive(Clone)]
 struct PrintTask<F> {
     callback: F,
     args: String,
