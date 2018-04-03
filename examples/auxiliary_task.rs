@@ -18,10 +18,9 @@ impl<F> Auxiliary for PrintTask<F>
 where F: FnMut(&mut String),
       for<'r> F: FnMut(&'r mut String)
 {
-    type Callback = F;
     type Args = String;
 
-    fn destructure(&mut self) -> (&mut F, &mut Self::Args) {
+    fn destructure(&mut self) -> (&mut FnMut(&mut String), &mut Self::Args) {
         let PrintTask {
             callback,
             args,

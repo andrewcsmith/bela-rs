@@ -92,13 +92,12 @@ where T: Auxiliary
 /// this is so that we can capture outer variables in the closure, and also
 /// mutate state if we need to in a type-safe way.  
 pub trait Auxiliary {
-    type Callback: FnMut(&mut Self::Args);
     type Args;
 
     /// `destructure` should split the Auxiliary into the closure and its
     /// arguments. This is called by the `unsafe extern` trampoline function to
     /// actually run the task at the proper Xenomai priority.
-    fn destructure(&mut self) -> (&mut Self::Callback, &mut Self::Args);
+    fn destructure(&mut self) -> (&mut FnMut(&mut Self::Args), &mut Self::Args);
 }
 
 pub struct CreatedTask(bela_sys::AuxiliaryTask);
