@@ -76,6 +76,33 @@ where T: UserData<'a> + 'a
     }
 }
 
+/// The "args" here must include the actual auxiliary task callback!
+unsafe extern "C" fn auxiliary_task_trampoline<T>(aux_ptr: *mut std::os::raw::c_void) 
+where T: Auxiliary
+{
+    let auxiliary: &mut T = mem::transmute(aux_ptr);
+    let (callback, args) = auxiliary.destructure();
+    callback(args);
+}
+
+/// Trait for `AuxiliaryTask`s, which run at a lower priority than the audio
+/// thread.
+/// 
+/// An `AuxiliaryTask` must contain both its callback closure and its arguments;
+/// this is so that we can capture outer variables in the closure, and also
+/// mutate state if we need to in a type-safe way.  
+pub trait Auxiliary {
+    type Callback: FnMut(&mut Self::Args);
+    type Args;
+
+    /// `destructure` should split the Auxiliary into the closure and its
+    /// arguments. This is called by the `unsafe extern` trampoline function to
+    /// actually run the task at the proper Xenomai priority.
+    fn destructure(&mut self) -> (&mut Self::Callback, &mut Self::Args);
+}
+
+pub struct CreatedTask(bela_sys::AuxiliaryTask);
+
 impl<'a, T: UserData<'a> + 'a> Bela<T> {
     pub fn new(user_data: T) -> Self {
         Bela {
@@ -141,6 +168,32 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
     pub fn should_stop(&self) -> bool {
         unsafe {
             bela_sys::gShouldStop != 0
+        }
+    }
+
+    pub fn create_auxiliary_task<A>(task: &A, priority: i32, name: &'static str) -> CreatedTask
+    where A: Auxiliary
+    {
+        let aux_task = unsafe {
+            bela_sys::Bela_createAuxiliaryTask(
+                Some(auxiliary_task_trampoline::<A>),
+                priority,
+                name.as_bytes().as_ptr(),
+                mem::transmute(task),
+            )
+        };
+
+        CreatedTask(aux_task)
+    }
+
+    pub fn schedule_auxiliary_task(task: &CreatedTask) -> Result<(), error::Error> {
+        let res = unsafe {
+            bela_sys::Bela_scheduleAuxiliaryTask(task.0)
+        };
+
+        match res {
+            0 => Ok(()),
+            _ => Err(error::Error::Task),
         }
     }
 
