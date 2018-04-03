@@ -171,6 +171,9 @@ impl Context {
     }
 
     /// Access the audio output slice
+    /// 
+    /// Mutably borrows self so that (hopefully) we do not have multiple mutable
+    /// pointers to the audio buffer available simultaneously.
     pub fn audio_out(&mut self) -> &mut [f32] {
         unsafe {
             let context = self.context_ptr();
@@ -214,6 +217,192 @@ impl InitSettings {
         &mut self.settings
     }
 
+    /// Get number of analog frames per period (buffer). Number of audio frames
+    /// depends on relative sample rates of the two. By default, audio is twice
+    /// the sample rate, so has twice the period size.
+    pub fn period_size(&self) -> usize {
+        self.settings.periodSize as usize
+    }
+
+    /// Set number of analog frames per period (buffer). Number of audio frames
+    /// depends on relative sample rates of the two. By default, audio is twice
+    /// the sample rate, so has twice the period size.
+    pub fn set_period_size(&mut self, size: usize) {
+        self.settings.periodSize = size as i32
+    }
+
+    /// Get whether to use the analog input and output
+    pub fn use_analog(&self) -> bool {
+        match self.settings.useAnalog {
+            0 => false,
+            _ => true,
+        }
+    }
+
+    /// Set whether to use the analog input and output
+    pub fn set_use_analog(&mut self, use_analog: bool) {
+        self.settings.useAnalog = match use_analog {
+            true => 1,
+            false => 0,
+        };
+    }
+
+    /// Get whether to use the digital input and output
+    pub fn use_digital(&self) -> bool {
+        match self.settings.useDigital {
+            0 => false,
+            _ => true,
+        }
+    }
+
+    /// Set whether to use the digital input and output
+    pub fn set_use_digital(&mut self, use_digital: bool) {
+        self.settings.useDigital = match use_digital {
+            true => 1,
+            false => 0,
+        };
+    }
+
+    pub fn num_audio_in_channels(&self) -> usize {
+        self.settings.numAudioInChannels as usize
+    }
+
+    pub fn set_num_audio_in_channels(&mut self, num: usize) {
+        self.settings.numAudioInChannels = num as i32;
+    }
+
+    pub fn num_audio_out_channels(&self) -> usize {
+        self.settings.numAudioOutChannels as usize
+    }
+
+    pub fn set_num_audio_out_channels(&mut self, num: usize) {
+        self.settings.numAudioOutChannels = num as i32;
+    }
+
+    pub fn num_analog_in_channels(&self) -> usize {
+        self.settings.numAnalogInChannels as usize
+    }
+
+    pub fn set_num_analog_in_channels(&mut self, num: usize) {
+        self.settings.numAnalogInChannels = num as i32;
+    }
+
+    pub fn num_analog_out_channels(&self) -> usize {
+        self.settings.numAnalogOutChannels as usize
+    }
+
+    pub fn set_num_analog_out_channels(&mut self, num: usize) {
+        self.settings.numAnalogOutChannels = num as i32;
+    }
+
+    pub fn num_digital_channels(&self) -> usize {
+        self.settings.numDigitalChannels as usize
+    }
+
+    pub fn set_num_digital_channels(&mut self, num: usize) {
+        self.settings.numDigitalChannels = num as i32;
+    }
+
+    pub fn begin_muted(&self) -> bool {
+        match self.settings.beginMuted {
+            0 => false,
+            _ => true
+        }
+    }
+
+    pub fn set_begin_muted(&mut self, val: bool) {
+        self.settings.beginMuted = match val {
+            true => 1,
+            false => 0
+        };
+    }
+
+    pub fn dac_level(&self) -> f32 {
+        self.settings.dacLevel
+    }
+
+    pub fn set_dac_level(&mut self, val: f32) {
+        self.settings.dacLevel = val;
+    }
+
+    pub fn adc_level(&self) -> f32 {
+        self.settings.adcLevel
+    }
+
+    pub fn set_adc_level(&mut self, val: f32) {
+        self.settings.adcLevel = val;
+    }
+
+    pub fn pga_gain(&self) -> [f32; 2] {
+        self.settings.pgaGain
+    }
+
+    pub fn set_pga_gain(&mut self, val: [f32; 2]) {
+        self.settings.pgaGain = val;
+    }
+
+    pub fn headphone_level(&self) -> f32 {
+        self.settings.headphoneLevel
+    }
+
+    pub fn set_headphone_level(&mut self, val: f32) {
+        self.settings.headphoneLevel = val;
+    }
+
+    pub fn num_mux_channels(&self) -> usize {
+        self.settings.numMuxChannels as usize
+    }
+
+    pub fn set_num_mux_channels(&mut self, val: usize) {
+        self.settings.numMuxChannels = val as i32;
+    }
+
+    pub fn audio_expander_inputs(&self) -> usize {
+        self.settings.audioExpanderInputs as usize
+    }
+
+    pub fn set_audio_expander_inputs(&mut self, val: usize) {
+        self.settings.audioExpanderInputs = val as u32;
+    }
+
+    pub fn audio_expander_outputs(&self) -> usize {
+        self.settings.audioExpanderOutputs as usize
+    }
+
+    pub fn set_audio_expander_outputs(&mut self, val: usize) {
+        self.settings.audioExpanderOutputs = val as u32;
+    }
+
+    pub fn pru_number(&self) -> usize {
+        self.settings.pruNumber as usize
+    }
+
+    pub fn set_pru_number(&mut self, val: usize) {
+        self.settings.pruNumber = val as i32;
+    }
+
+    pub fn pru_filename(&self) -> [u8; 256] {
+        self.settings.pruFilename
+    }
+
+    pub fn set_pru_filename(&mut self, val: [u8; 256]) {
+        self.settings.pruFilename = val;
+    }
+
+    pub fn detect_underruns(&self) -> bool {
+        match self.settings.detectUnderruns {
+            0 => false,
+            _ => true
+        }
+    }
+
+    pub fn set_detect_underruns(&mut self, val: bool) {
+        self.settings.detectUnderruns = match val {
+            true => 1,
+            false => 0
+        };
+    }
+
     pub fn verbose(&self) -> bool {
         match self.settings.verbose {
             0 => false,
@@ -223,6 +412,34 @@ impl InitSettings {
 
     pub fn set_verbose(&mut self, val: bool) {
         self.settings.verbose = match val {
+            true => 1,
+            false => 0
+        };
+    }
+
+    pub fn enable_led(&self) -> bool {
+        match self.settings.enableLED {
+            0 => false,
+            _ => true
+        }
+    }
+
+    pub fn set_enable_led(&mut self, val: bool) {
+        self.settings.enableLED = match val {
+            true => 1,
+            false => 0
+        };
+    }
+
+    pub fn enable_cape_button_monitoring(&self) -> bool {
+        match self.settings.enableCapeButtonMonitoring {
+            0 => false,
+            _ => true
+        }
+    }
+
+    pub fn set_enable_cape_button_monitoring(&mut self, val: bool) {
+        self.settings.enableCapeButtonMonitoring = match val {
             true => 1,
             false => 0
         };
@@ -242,6 +459,20 @@ impl InitSettings {
         };
     }
 
+    pub fn interleave(&self) -> bool {
+        match self.settings.interleave {
+            0 => false,
+            _ => true
+        }
+    }
+
+    pub fn set_interleave(&mut self, val: bool) {
+        self.settings.interleave = match val {
+            true => 1,
+            false => 0
+        };
+    }
+
     pub fn analog_outputs_persist(&self) -> bool {
         match self.settings.analogOutputsPersist {
             0 => false,
@@ -254,6 +485,76 @@ impl InitSettings {
             true => 1,
             false => 0
         };
+    }
+
+    pub fn uniform_sample_rate(&self) -> bool {
+        match self.settings.uniformSampleRate {
+            0 => false,
+            _ => true
+        }
+    }
+
+    pub fn set_uniform_sample_rate(&mut self, val: bool) {
+        self.settings.uniformSampleRate = match val {
+            true => 1,
+            false => 0
+        };
+    }
+
+    pub fn audio_thread_stack_size(&self) -> usize {
+        self.settings.audioThreadStackSize as usize
+    }
+
+    pub fn set_audio_thread_stack_size(&mut self, num: usize) {
+        self.settings.audioThreadStackSize = num as u32;
+    }
+
+    pub fn auxiliary_task_stack_size(&self) -> usize {
+        self.settings.auxiliaryTaskStackSize as usize
+    }
+
+    pub fn set_auxiliary_task_stack_size(&mut self, num: usize) {
+        self.settings.auxiliaryTaskStackSize = num as u32;
+    }
+
+    pub fn codec_i2c_address(&self) -> usize {
+        self.settings.codecI2CAddress as usize
+    }
+
+    pub fn set_codec_i2c_address(&mut self, num: usize) {
+        self.settings.codecI2CAddress = num as i32;
+    }
+
+    pub fn amp_mute_pin(&self) -> usize {
+        self.settings.ampMutePin as usize
+    }
+
+    pub fn set_amp_mute_pin(&mut self, num: usize) {
+        self.settings.ampMutePin = num as i32;
+    }
+
+    pub fn receive_port(&self) -> usize {
+        self.settings.receivePort as usize
+    }
+
+    pub fn set_receive_port(&mut self, num: usize) {
+        self.settings.receivePort = num as i32;
+    }
+
+    pub fn transmit_port(&self) -> usize {
+        self.settings.transmitPort as usize
+    }
+
+    pub fn set_transmit_port(&mut self, num: usize) {
+        self.settings.transmitPort = num as i32;
+    }
+
+    pub fn server_name(&self) -> [u8; 256] {
+        self.settings.serverName 
+    }
+
+    pub fn set_server_name(&mut self, val: [u8; 256]) {
+        self.settings.serverName = val;
     }
 }
 
