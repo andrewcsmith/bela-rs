@@ -4,7 +4,6 @@
 extern crate bela;
 extern crate sample;
 
-use std::{thread, time};
 use bela::*;
 
 #[derive(Clone)]
@@ -89,17 +88,6 @@ fn go() -> Result<(), error::Error> {
 
     let user_data = AppData::new(my_data, &mut render, Some(&mut setup), Some(&mut cleanup));
 
-    let mut bela_app: Bela<AppData<MyData>> = Bela::new(user_data);
     let mut settings = InitSettings::default();
-    bela_app.init_audio(&mut settings)?;
-    bela_app.start_audio()?;
-
-    while !bela_app.should_stop() {
-        thread::sleep(time::Duration::new(1, 0));
-    }
-
-    bela_app.stop_audio();
-    bela_app.cleanup_audio();
-
-    Ok(())
+    Bela::new(user_data).run(&mut settings)
 }

@@ -3,6 +3,7 @@ extern crate libc;
 extern crate bela_sys;
 
 use bela_sys::{BelaInitSettings, BelaContext};
+use std::{thread, time};
 use std::{mem, slice};
 use std::marker::PhantomData;
 
@@ -108,6 +109,19 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
             initialized: false,
             user_data,
         }
+    }
+
+    pub fn run(&mut self, settings: &mut InitSettings) -> Result<(), error::Error> {
+        self.init_audio(settings)?;
+        self.start_audio()?;
+        while !self.should_stop() {
+            thread::sleep(time::Duration::new(0, 1000));
+        }
+
+        self.stop_audio();
+        self.cleanup_audio();
+
+        Ok(())
     }
 
     pub fn set_render<F: 'a>(&mut self, func: &'a mut F) 
