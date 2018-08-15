@@ -247,7 +247,7 @@ impl Context {
     }
 
     /// Access the audio output slice
-    /// 
+    ///
     /// Mutably borrows self so that (hopefully) we do not have multiple mutable
     /// pointers to the audio buffer available simultaneously.
     pub fn audio_out(&mut self) -> &mut [f32] {
@@ -260,15 +260,156 @@ impl Context {
         }
     }
 
+    /// Access the audio input slice
+    pub fn audio_in(&mut self) -> &mut [f32] {
+        unsafe {
+            let n_frames = (*self.context).audioFrames;
+            let n_channels = (*self.context).audioInChannels;
+            let audio_in_ptr = (*self.context).audioIn as *mut f32;
+            slice::from_raw_parts_mut(audio_in_ptr, (n_frames * n_channels) as usize)
+        }
+    }
+
+    /// Access the digital input/output slice
+    ///
+    /// Mutably borrows self so that (hopefully) we do not have multiple mutable
+    /// pointers to the digital buffer available simultaneously.
+    pub fn digital_out(&mut self) -> &mut [f32] {
+        unsafe {
+            let context = self.context_ptr();
+            let n_frames = (*context).digitalFrames;
+            let n_channels = (*context).digitalChannels;
+            let digital_ptr = (*context).digital as *mut f32;
+            slice::from_raw_parts_mut(digital_ptr, (n_frames * n_channels) as usize)
+        }
+    }
+
+    /// Access the analog output slice
+    ///
+    /// Mutably borrows self so that (hopefully) we do not have multiple mutable
+    /// pointers to the analog buffer available simultaneously.
+    pub fn analog_out(&mut self) -> &mut [f32] {
+        unsafe {
+            let context = self.context_ptr();
+            let n_frames = (*context).analogFrames;
+            let n_channels = (*context).analogOutChannels;
+            let analog_out_ptr = (*context).analogOut as *mut f32;
+            slice::from_raw_parts_mut(analog_out_ptr, (n_frames * n_channels) as usize)
+        }
+    }
+
+    /// Access the analog input slice
+    pub fn analog_in(&mut self) -> &mut [f32] {
+        unsafe {
+            let n_frames = (*self.context).analogFrames;
+            let n_channels = (*self.context).analogInChannels;
+            let analog_in_ptr = (*self.context).analogIn as *mut f32;
+            slice::from_raw_parts_mut(analog_in_ptr, (n_frames * n_channels) as usize)
+        }
+    }
+
     pub fn audio_frames(&self) -> usize {
         unsafe {
             (*self.context).audioFrames as usize
         }
     }
 
+    pub fn audio_in_channels(&self) -> usize {
+        unsafe {
+            (*self.context).audioInChannels as usize
+        }
+    }
+
     pub fn audio_out_channels(&self) -> usize {
         unsafe {
             (*self.context).audioOutChannels as usize
+        }
+    }
+
+    pub fn  audio_sample_rate(&self) -> f32 {
+        unsafe {
+            (*self.context).audioSampleRate
+        }
+    }
+
+    pub fn analog_frames(&self) -> usize {
+      unsafe {
+          (*self.context).analogFrames as usize
+      }
+    }
+
+    pub fn analog_in_channels(&self) -> usize {
+        unsafe {
+            (*self.context).analogInChannels as usize
+        }
+    }
+
+    pub fn analog_out_channels(&self) -> usize {
+        unsafe {
+            (*self.context).analogOutChannels as usize
+        }
+    }
+
+    pub fn  analog_sample_rate(&self) -> f32 {
+        unsafe {
+            (*self.context).analogSampleRate
+        }
+    }
+
+    pub fn digital_frames(&self) -> usize {
+      unsafe {
+          (*self.context).digitalFrames as usize
+      }
+    }
+
+    pub fn digital_channels(&self) -> usize {
+        unsafe {
+            (*self.context).digitalChannels as usize
+        }
+    }
+
+    pub fn  digital_sample_rate(&self) -> f32 {
+        unsafe {
+            (*self.context).digitalSampleRate
+        }
+    }
+
+    pub fn audio_frames_elapsed(&self) -> usize {
+        unsafe {
+            (*self.context).audioFramesElapsed as usize
+        }
+    }
+
+    pub fn multiplexer_channels(&self) -> usize {
+      unsafe {
+          (*self.context).multiplexerChannels as usize
+      }
+    }
+
+    pub fn multiplexer_starting_channels(&self) -> usize {
+      unsafe {
+          (*self.context).multiplexerStartingChannel as usize
+      }
+    }
+
+    pub fn multiplexer_analog_in(&self) -> &mut [f32] {
+        unsafe {
+            let n_frames = (*self.context).analogFrames;
+            let n_channels = (*self.context).multiplexerChannels;
+            let analog_in_ptr = (*self.context).multiplexerAnalogIn as *mut f32;
+            slice::from_raw_parts_mut(analog_in_ptr, (n_frames * n_channels) as usize)
+        }
+    }
+
+    pub fn multiplexer_enabled(&self) -> u32 {
+        unsafe {
+            (*self.context).audioExpanderEnabled
+        }
+    }
+
+    pub fn flags(&self) -> u32 {
+        unsafe {
+            (*self.context).flags
         }
     }
 }
