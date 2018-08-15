@@ -1,6 +1,6 @@
 use std::{error, fmt};
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum Error {
     Init,
     Start,
