@@ -1,6 +1,5 @@
 extern crate bela;
 
-use std::{thread, time};
 use bela::*;
 
 struct Phasor {
@@ -42,16 +41,5 @@ fn go() -> Result<(), error::Error> {
 
     let mut bela_app = Bela::new(user_data);
     let mut settings = InitSettings::default();
-
-    bela_app.init_audio(&mut settings)?;
-    bela_app.start_audio()?;
-
-    while !bela_app.should_stop() {
-        thread::sleep(time::Duration::new(1, 0));
-    }
-
-    bela_app.stop_audio();
-    bela_app.cleanup_audio();
-
-    Ok(())
+    bela_app.run(&mut settings)
 }
