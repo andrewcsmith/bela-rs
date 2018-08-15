@@ -3,38 +3,8 @@ extern crate bela;
 use std::{thread, time};
 use bela::*;
 
-struct AppData<'a> {
-    render: &'a Fn(&mut Context, &mut AppData<'a>),
-    setup: Option<&'a Fn(&mut Context, &mut AppData<'a>) -> Result<(), error::Error>>,
-    cleanup: Option<&'a Fn(&mut Context, &mut AppData<'a>)>,
-    frame_index: usize,
-    wrap_rate: usize,
-}
-
-impl<'a> UserData<'a> for AppData<'a> {
-    fn render_fn(&self) -> &'a Fn(&mut Context, &mut AppData<'a>) {
-        self.render
-    }
-
-    fn set_render_fn(&mut self, callback: &'a (Fn(&mut Context, &mut AppData<'a>) + 'a)) {
-        self.render = callback;
-    }
-
-    fn setup_fn(&self) -> Option<&'a Fn(&mut Context, &mut AppData<'a>) -> Result<(), error::Error>> {
-        self.setup
-    }
-
-    fn set_setup_fn(&mut self, callback: Option<&'a (Fn(&mut Context, &mut AppData<'a>) -> Result<(), error::Error> + 'a)>) {
-        self.setup = callback;
-    }
-
-    fn cleanup_fn(&self) -> Option<&'a Fn(&mut Context, &mut AppData<'a>)> {
-        self.cleanup
-    }
-
-    fn set_cleanup_fn(&mut self, callback: Option<&'a (Fn(&mut Context, &mut AppData<'a>) + 'a)>) {
-        self.cleanup = callback;
-    }
+struct Phasor {
+    idx: usize,
 }
 
 fn main() {
@@ -42,45 +12,37 @@ fn main() {
 }
 
 fn go() -> Result<(), error::Error> {
-    let setup = |_context: &mut Context, user_data: &mut AppData| -> Result<(), error::Error> {
+    let mut setup = |_context: &mut Context, _user_data: &mut Phasor| -> Result<(), error::Error> {
         println!("Setting up");
-        user_data.wrap_rate = 10;
         Ok(())
     };
 
-    let cleanup = |_context: &mut Context, _user_data: &mut AppData| {
+    let mut cleanup = |_context: &mut Context, _user_data: &mut Phasor| {
         println!("Cleaning up");
     };
 
-    // Generates a sawtooth wave with the period of whatever the audio frame
-    // size is.
-    let render = |context: &mut Context, user_data: &mut AppData| {
-        let AppData {
-            ref mut frame_index,
-            wrap_rate,
-            ..
-        } = *user_data;
-
-        let len = context.audio_out().len();
-        for (idx, samp) in context.audio_out().iter_mut().enumerate() {
-            *samp = (idx as f32 / len as f32) * (*frame_index % wrap_rate) as f32;
+    // Generates a non-bandlimited sawtooth at 110Hz.
+    let mut render = |context: &mut Context, phasor: &mut Phasor| {
+        for (_, samp) in context.audio_out().iter_mut().enumerate() {
+            let gain = 0.5;
+            *samp = 2. * (phasor.idx as f32 * 110. / 44100.) - 1.;
+            *samp *= gain;
+            phasor.idx += 1;
+            if phasor.idx as f32 > 44100. / 110. {
+                phasor.idx = 0;
+            }
         }
-
-        // We want to keep track of the frame index here
-        *frame_index = frame_index.wrapping_add(1);
     };
 
-    let user_data = AppData {
-        render: &render,
-        setup: Some(&setup),
-        cleanup: Some(&cleanup),
-        frame_index: 0,
-        // This gets changed in the setup function
-        wrap_rate: 1,
+    let phasor = Phasor {
+        idx: 0,
     };
 
-    let mut bela_app: Bela<AppData> = Bela::new(user_data);
+    let user_data = AppData::new(phasor, &mut render, Some(&mut setup), Some(&mut cleanup));
+
+    let mut bela_app = Bela::new(user_data);
     let mut settings = InitSettings::default();
+
     bela_app.init_audio(&mut settings)?;
     bela_app.start_audio()?;
 
