@@ -241,7 +241,12 @@ impl Context {
         }
     }
 
-    pub fn context_ptr(&mut self) -> *mut BelaContext {
+    pub fn context_mut_ptr(&mut self) -> *mut BelaContext {
+        let ptr: *mut BelaContext = self.context;
+        ptr
+    }
+
+    pub fn context_ptr(&self) -> *const BelaContext {
         let ptr: *mut BelaContext = self.context;
         ptr
     }
@@ -252,11 +257,25 @@ impl Context {
     /// pointers to the audio buffer available simultaneously.
     pub fn audio_out(&mut self) -> &mut [f32] {
         unsafe {
-            let context = self.context_ptr();
+            let context = self.context_mut_ptr();
             let n_frames = (*context).audioFrames;
             let n_channels = (*context).audioOutChannels;
             let audio_out_ptr = (*context).audioOut as *mut f32;
             slice::from_raw_parts_mut(audio_out_ptr, (n_frames * n_channels) as usize)
+        }
+    }
+
+    /// Access the audio input slice
+    /// 
+    /// Mutably borrows self so that (hopefully) we do not have multiple mutable
+    /// pointers to the audio buffer available simultaneously.
+    pub fn audio_in(&self) -> &[f32] {
+        unsafe {
+            let context = self.context_ptr();
+            let n_frames = (*context).audioFrames;
+            let n_channels = (*context).audioInChannels;
+            let audio_in_ptr = (*context).audioIn as *const f32;
+            slice::from_raw_parts(audio_in_ptr, (n_frames * n_channels) as usize)
         }
     }
 
@@ -269,6 +288,12 @@ impl Context {
     pub fn audio_out_channels(&self) -> usize {
         unsafe {
             (*self.context).audioOutChannels as usize
+        }
+    }
+
+    pub fn audio_in_channels(&self) -> usize {
+        unsafe {
+            (*self.context).audioInChannels as usize
         }
     }
 }
