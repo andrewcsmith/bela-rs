@@ -1,6 +1,8 @@
 //! Produces a sine wave while printing "this is a string" repeatedly,
 //! appending "LOL" to every iteration.
 //! 
+//! There's an example here for both the stack-allocated and a Boxed closure.
+//! 
 extern crate bela;
 extern crate sample;
 
