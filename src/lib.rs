@@ -9,6 +9,11 @@ use std::marker::PhantomData;
 
 pub mod error;
 
+pub enum DigitalDirection {
+    INPUT,
+    OUTPUT,
+}
+
 /// The `Bela` struct is essentially built to ensure that the type parameter
 /// `<T>` is consistent across all invocations of the setup, render, and cleanup
 /// functions. This is because `<T>` is the `UserData` of the original Bela
@@ -419,6 +424,54 @@ impl Context {
     pub fn flags(&self) -> u32 {
         unsafe {
             (*self.context).flags
+        }
+    }
+
+    // Returns the value of a given digital input at the given frame number
+    pub fn digital_read(&mut self, frame: usize, channel: usize) -> u32 {
+        let digital = self.digital();
+        (digital[frame] >> (channel + 16)) & 1
+    }
+
+    // Sets a given digital output channel to a value for the current frame and all subsequent frames
+    pub fn digital_write(&mut self, frame: usize, channel: usize, value: usize) {
+        let digital = self.digital();
+        for i in frame..digital.len() {
+            if value != 0 {
+                digital[i] |= 1 << (channel + 16);
+            } else {
+                digital[i] &= !(1 << (channel + 16));
+            }
+        }
+    }
+
+    // Sets a given digital output channel to a value for the current frame only
+    pub fn digital_write_once(&mut self, frame: usize, channel: usize, value: usize) {
+        let digital = self.digital();
+        if value != 0 {
+            digital[frame] |= 1 << (channel + 16);
+        } else {
+            digital[frame] &= !(1 << (channel + 16));
+        }
+    }
+
+    // Sets the direction of a digital pin for the current frame and all subsequent frames
+    pub fn pin_mode(&mut self, frame: usize, channel: usize, mode: DigitalDirection) {
+        let digital = self.digital();
+        for i in frame..digital.len() {
+            match mode {
+                DigitalDirection::INPUT => { digital[i] |= 1 << channel; }
+                DigitalDirection::OUTPUT => { digital[i] &= !(1 << channel); }
+            }
+        }
+    }
+
+    // Sets the direction of a digital pin for the current frame only
+    pub fn pin_mode_once(&mut self, frame: usize, channel: usize, mode: DigitalDirection) {
+        let digital = self.digital();
+        match mode {
+            DigitalDirection::INPUT => { digital[frame] |= 1 << channel; }
+            DigitalDirection::OUTPUT => { digital[frame] &= !(1 << channel); }
         }
     }
 }
