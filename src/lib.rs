@@ -282,12 +282,12 @@ impl Context {
     ///
     /// Mutably borrows self so that (hopefully) we do not have multiple mutable
     /// pointers to the digital buffer available simultaneously.
-    pub fn digital_out(&mut self) -> &mut [f32] {
+    pub fn digital(&mut self) -> &mut [u32] {
         unsafe {
             let context = self.context_ptr();
             let n_frames = (*context).digitalFrames;
             let n_channels = (*context).digitalChannels;
-            let digital_ptr = (*context).digital as *mut f32;
+            let digital_ptr = (*context).digital as *mut u32;
             slice::from_raw_parts_mut(digital_ptr, (n_frames * n_channels) as usize)
         }
     }
