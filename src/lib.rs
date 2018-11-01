@@ -314,7 +314,6 @@ impl Context {
     /// Access the analog input slice
     pub fn analog_in(&self) -> &[f32] {
         unsafe {
-            let context = self.context_ptr();
             let n_frames = (*self.context).analogFrames;
             let n_channels = (*self.context).analogInChannels;
             let analog_in_ptr = (*self.context).analogIn as *mut f32;
