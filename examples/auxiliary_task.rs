@@ -1,8 +1,8 @@
 //! Produces a sine wave while printing "this is a string" repeatedly,
 //! appending "LOL" to every iteration.
-//! 
+//!
 //! There's an example here for both the stack-allocated and a Boxed closure.
-//! 
+//!
 extern crate bela;
 extern crate sample;
 
@@ -20,7 +20,7 @@ where F: FnMut(&mut String),
 {
     type Args = String;
 
-    fn destructure(&mut self) -> (&mut FnMut(&mut String), &mut Self::Args) {
+    fn destructure(&mut self) -> (&mut dyn FnMut(&mut String), &mut Self::Args) {
         let PrintTask {
             callback,
             args,
@@ -76,7 +76,7 @@ fn go() -> Result<(), error::Error> {
     let mut render = |_context: &mut Context, user_data: &mut MyData| {
         if user_data.frame_index % 1024 == 0 {
             for task in user_data.tasks.iter() {
-                BelaApp::schedule_auxiliary_task(task);
+                BelaApp::schedule_auxiliary_task(task).unwrap();
             }
         }
 
