@@ -19,24 +19,24 @@ pub enum DigitalDirection {
 /// functions. This is because `<T>` is the `UserData` of the original Bela
 /// library -- we want to ensure that the `UserData` we are initializing with
 /// is the exact same as the one we are attempting to access with each function.
-/// 
+///
 /// TODO: Bela needs to also wrap the various setup, render, and cleanup
 /// functions and keep them in the same struct.
-/// 
+///
 /// Called when audio is initialized.
-/// 
+///
 /// ```rust
 /// pub type SetupFn = FnOnce(&mut Context, T) -> bool;
 /// ```
-/// 
+///
 /// Called on every frame.
-/// 
+///
 /// ```rust
 /// pub type RenderFn = Fn(&mut Context, T);
 /// ```
-/// 
+///
 /// Called when audio is stopped.
-/// 
+///
 /// ```rust
 /// pub type CleanupFn = FnOnce(&mut Context, T) -> bool;
 /// ```
@@ -45,7 +45,7 @@ pub struct Bela<T> {
     user_data: T,
 }
 
-unsafe extern "C" fn render_trampoline<'a, T>(context: *mut BelaContext, user_data: *mut std::os::raw::c_void) 
+unsafe extern "C" fn render_trampoline<'a, T>(context: *mut BelaContext, user_data: *mut std::os::raw::c_void)
 where T: UserData<'a> + 'a
 {
     let mut context = Context::new(context);
@@ -73,7 +73,7 @@ where T: UserData<'a> + 'a
 }
 
 /// The "args" here must include the actual auxiliary task callback!
-unsafe extern "C" fn auxiliary_task_trampoline<T>(aux_ptr: *mut std::os::raw::c_void) 
+unsafe extern "C" fn auxiliary_task_trampoline<T>(aux_ptr: *mut std::os::raw::c_void)
 where T: Auxiliary
 {
     let auxiliary: &mut T = mem::transmute(aux_ptr);
@@ -83,17 +83,17 @@ where T: Auxiliary
 
 /// Trait for `AuxiliaryTask`s, which run at a lower priority than the audio
 /// thread.
-/// 
+///
 /// An `AuxiliaryTask` must contain both its callback closure and its arguments;
 /// this is so that we can capture outer variables in the closure, and also
-/// mutate state if we need to in a type-safe way.  
+/// mutate state if we need to in a type-safe way.
 pub trait Auxiliary {
     type Args: ?Sized;
 
     /// `destructure` should split the Auxiliary into the closure and its
     /// arguments. This is called by the `unsafe extern` trampoline function to
     /// actually run the task at the proper Xenomai priority.
-    fn destructure(&mut self) -> (&mut FnMut(&mut Self::Args), &mut Self::Args);
+    fn destructure(&mut self) -> (&mut dyn FnMut(&mut Self::Args), &mut Self::Args);
 }
 
 impl<T> Auxiliary for Box<T>
@@ -101,7 +101,7 @@ where T: Auxiliary + ?Sized
 {
     type Args = T::Args;
 
-    fn destructure(&mut self) -> (&mut FnMut(&mut Self::Args), &mut Self::Args) {
+    fn destructure(&mut self) -> (&mut dyn FnMut(&mut Self::Args), &mut Self::Args) {
         T::destructure(self)
     }
 }
@@ -129,21 +129,21 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
         Ok(())
     }
 
-    pub fn set_render<F: 'a>(&mut self, func: &'a mut F) 
+    pub fn set_render<F: 'a>(&mut self, func: &'a mut F)
     where F: FnMut(&mut Context, T::Data),
           for<'r, 's> F: FnMut(&'r mut Context, &'s mut T::Data)
     {
         self.user_data.set_render_fn(func);
     }
 
-    pub fn set_setup<F: 'a>(&mut self, func: &'a mut F) 
+    pub fn set_setup<F: 'a>(&mut self, func: &'a mut F)
     where F: FnMut(&mut Context, T::Data) -> bool,
           for<'r, 's> F: FnMut(&'r mut Context, &'s mut T::Data) -> Result<(), error::Error>
     {
         self.user_data.set_setup_fn(Some(func));
     }
 
-    pub fn set_cleanup<F: 'a>(&mut self, func: &'a mut F) 
+    pub fn set_cleanup<F: 'a>(&mut self, func: &'a mut F)
     where F: FnMut(&mut Context, T::Data),
           for<'r, 's> F: FnMut(&'r mut Context, &'s mut T::Data)
     {
@@ -160,7 +160,7 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
         };
 
         match out {
-            0 => { 
+            0 => {
                 self.initialized = true;
                 Ok(())
             },
@@ -169,8 +169,8 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
     }
 
     pub fn start_audio(&self) -> Result<(), error::Error> {
-        if !self.initialized { 
-            return Err(error::Error::Start); 
+        if !self.initialized {
+            return Err(error::Error::Start);
         }
 
         let out = unsafe {
@@ -191,7 +191,7 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
 
     /// Takes a _mutable reference_ to the task, because we must be ensured that
     /// the task is unique and that it does not move.
-    /// 
+    ///
     /// I highly recommend ONLY USING STACK-ALLOCATED CLOSURES AS TASKS. This
     /// particular implementation is wildly unsafe, but if you use a stack
     /// closure it _should_ be possible to avoid a segfault. See the
@@ -213,7 +213,7 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
         CreatedTask(aux_task, PhantomData)
     }
 
-    pub fn schedule_auxiliary_task(task: &CreatedTask) -> Result<(), error::Error> 
+    pub fn schedule_auxiliary_task(task: &CreatedTask) -> Result<(), error::Error>
     {
         let res = unsafe {
             bela_sys::Bela_scheduleAuxiliaryTask(task.0)
@@ -271,7 +271,7 @@ impl Context {
     }
 
     /// Access the audio input slice
-    /// 
+    ///
     /// Immutably borrows self and returns an immutable buffer of audio in data.
     pub fn audio_in(&self) -> &[f32] {
         unsafe {
@@ -479,25 +479,25 @@ pub trait UserData<'a> {
     type Data;
 
     fn render_fn(&mut self, &mut Context);
-    fn set_render_fn(&mut self, &'a mut FnMut(&mut Context, &mut Self::Data));
+    fn set_render_fn(&mut self, &'a mut dyn FnMut(&mut Context, &mut Self::Data));
     fn setup_fn(&mut self, &mut Context) -> Result<(), error::Error>;
-    fn set_setup_fn(&mut self, Option<&'a mut FnMut(&mut Context, &mut Self::Data) -> Result<(), error::Error>>);
+    fn set_setup_fn(&mut self, Option<&'a mut dyn FnMut(&mut Context, &mut Self::Data) -> Result<(), error::Error>>);
     fn cleanup_fn(&mut self, &mut Context);
-    fn set_cleanup_fn(&mut self, Option<&'a mut FnMut(&mut Context, &mut Self::Data)>);
+    fn set_cleanup_fn(&mut self, Option<&'a mut dyn FnMut(&mut Context, &mut Self::Data)>);
 }
 
 pub struct AppData<'a, D: 'a> {
     pub data: D,
-    render: &'a mut FnMut(&mut Context, &mut D),
-    setup: Option<&'a mut FnMut(&mut Context, &mut D) -> Result<(), error::Error>>,
-    cleanup: Option<&'a mut FnMut(&mut Context, &mut D)>,
+    render: &'a mut dyn FnMut(&mut Context, &mut D),
+    setup: Option<&'a mut dyn FnMut(&mut Context, &mut D) -> Result<(), error::Error>>,
+    cleanup: Option<&'a mut dyn FnMut(&mut Context, &mut D)>,
 }
 
 impl<'a, D> AppData<'a, D> {
-    pub fn new(data: D, 
-        render: &'a mut FnMut(&mut Context, &mut D), 
-        setup: Option<&'a mut FnMut(&mut Context, &mut D) -> Result<(), error::Error>>, 
-        cleanup: Option<&'a mut FnMut(&mut Context, &mut D)>) -> AppData<'a, D> 
+    pub fn new(data: D,
+        render: &'a mut dyn FnMut(&mut Context, &mut D),
+        setup: Option<&'a mut dyn FnMut(&mut Context, &mut D) -> Result<(), error::Error>>,
+        cleanup: Option<&'a mut dyn FnMut(&mut Context, &mut D)>) -> AppData<'a, D>
     {
         AppData {
             data,
@@ -521,7 +521,7 @@ impl<'a, D> UserData<'a> for AppData<'a, D> {
         render(context, data)
     }
 
-    fn set_render_fn(&mut self, callback: &'a mut (FnMut(&mut Context, &mut D) + 'a)) {
+    fn set_render_fn(&mut self, callback: &'a mut (dyn FnMut(&mut Context, &mut D) + 'a)) {
         self.render = callback;
     }
 
@@ -538,7 +538,7 @@ impl<'a, D> UserData<'a> for AppData<'a, D> {
         }
     }
 
-    fn set_setup_fn(&mut self, callback: Option<&'a mut (FnMut(&mut Context, &mut D) -> Result<(), error::Error> + 'a)>) {
+    fn set_setup_fn(&mut self, callback: Option<&'a mut (dyn FnMut(&mut Context, &mut D) -> Result<(), error::Error> + 'a)>) {
         self.setup = callback;
     }
 
@@ -555,7 +555,7 @@ impl<'a, D> UserData<'a> for AppData<'a, D> {
         };
     }
 
-    fn set_cleanup_fn(&mut self, callback: Option<&'a mut (FnMut(&mut Context, &mut D) + 'a)>) {
+    fn set_cleanup_fn(&mut self, callback: Option<&'a mut (dyn FnMut(&mut Context, &mut D) + 'a)>) {
         self.cleanup = callback;
     }
 }
@@ -785,19 +785,19 @@ impl InitSettings {
         };
     }
 
-    pub fn enable_cape_button_monitoring(&self) -> bool {
-        match self.settings.enableCapeButtonMonitoring {
-            0 => false,
-            _ => true
-        }
-    }
+    // pub fn enable_cape_button_monitoring(&self) -> bool {
+    //     match self.settings.enableCapeButtonMonitoring {
+    //         0 => false,
+    //         _ => true
+    //     }
+    // }
 
-    pub fn set_enable_cape_button_monitoring(&mut self, val: bool) {
-        self.settings.enableCapeButtonMonitoring = match val {
-            true => 1,
-            false => 0
-        };
-    }
+    // pub fn set_enable_cape_button_monitoring(&mut self, val: bool) {
+    //     self.settings.enableCapeButtonMonitoring = match val {
+    //         true => 1,
+    //         false => 0
+    //     };
+    // }
 
     pub fn high_performance_mode(&self) -> bool {
         match self.settings.highPerformanceMode {
@@ -871,13 +871,13 @@ impl InitSettings {
         self.settings.auxiliaryTaskStackSize = num as u32;
     }
 
-    pub fn codec_i2c_address(&self) -> usize {
-        self.settings.codecI2CAddress as usize
-    }
+    // pub fn codec_i2c_address(&self) -> usize {
+    //     self.settings.codecI2CAddress as usize
+    // }
 
-    pub fn set_codec_i2c_address(&mut self, num: usize) {
-        self.settings.codecI2CAddress = num as i32;
-    }
+    // pub fn set_codec_i2c_address(&mut self, num: usize) {
+    //     self.settings.codecI2CAddress = num as i32;
+    // }
 
     pub fn amp_mute_pin(&self) -> usize {
         self.settings.ampMutePin as usize
@@ -887,37 +887,37 @@ impl InitSettings {
         self.settings.ampMutePin = num as i32;
     }
 
-    pub fn receive_port(&self) -> usize {
-        self.settings.receivePort as usize
-    }
+    // pub fn receive_port(&self) -> usize {
+    //     self.settings.receivePort as usize
+    // }
 
-    pub fn set_receive_port(&mut self, num: usize) {
-        self.settings.receivePort = num as i32;
-    }
+    // pub fn set_receive_port(&mut self, num: usize) {
+    //     self.settings.receivePort = num as i32;
+    // }
 
-    pub fn transmit_port(&self) -> usize {
-        self.settings.transmitPort as usize
-    }
+    // pub fn transmit_port(&self) -> usize {
+    //     self.settings.transmitPort as usize
+    // }
 
-    pub fn set_transmit_port(&mut self, num: usize) {
-        self.settings.transmitPort = num as i32;
-    }
+    // pub fn set_transmit_port(&mut self, num: usize) {
+    //     self.settings.transmitPort = num as i32;
+    // }
 
-    pub fn server_name(&self) -> [u8; 256] {
-        self.settings.serverName 
-    }
+    // pub fn server_name(&self) -> [u8; 256] {
+    //     self.settings.serverName
+    // }
 
-    pub fn set_server_name(&mut self, val: [u8; 256]) {
-        self.settings.serverName = val;
-    }
+    // pub fn set_server_name(&mut self, val: [u8; 256]) {
+    //     self.settings.serverName = val;
+    // }
 }
 
 impl Default for InitSettings {
     fn default() -> InitSettings {
         let settings = unsafe {
-            let mut settings: BelaInitSettings = mem::uninitialized();
-            bela_sys::Bela_defaultSettings(&mut settings);
-            settings
+            let mut settings = mem::MaybeUninit::<BelaInitSettings>::uninit();
+            bela_sys::Bela_defaultSettings(settings.as_mut_ptr());
+            settings.assume_init()
         };
 
         InitSettings {
