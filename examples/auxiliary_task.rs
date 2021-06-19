@@ -15,16 +15,14 @@ struct PrintTask<F> {
 }
 
 impl<F> Auxiliary for PrintTask<F>
-where F: FnMut(&mut String),
-      for<'r> F: FnMut(&'r mut String)
+where
+    F: FnMut(&mut String),
+    for<'r> F: FnMut(&'r mut String),
 {
     type Args = String;
 
     fn destructure(&mut self) -> (&mut dyn FnMut(&mut String), &mut Self::Args) {
-        let PrintTask {
-            callback,
-            args,
-        } = self;
+        let PrintTask { callback, args } = self;
 
         (callback, args)
     }
@@ -32,7 +30,7 @@ where F: FnMut(&mut String),
 
 struct MyData<'a> {
     frame_index: usize,
-    tasks: Vec<CreatedTask<'a>>
+    tasks: Vec<CreatedTask<'a>>,
 }
 
 type BelaApp<'a> = Bela<AppData<'a, MyData<'a>>>;
@@ -64,8 +62,12 @@ fn go() -> Result<(), error::Error> {
 
     let mut setup = |_context: &mut Context, user_data: &mut MyData| -> Result<(), error::Error> {
         println!("Setting up");
-        user_data.tasks.push(unsafe { BelaApp::create_auxiliary_task(&mut boxed, 10, "printing_stuff") });
-        user_data.tasks.push(unsafe { BelaApp::create_auxiliary_task(&mut another_print_task, 10, "printing_more_stuff") });
+        user_data
+            .tasks
+            .push(unsafe { BelaApp::create_auxiliary_task(&mut boxed, 10, "printing_stuff") });
+        user_data.tasks.push(unsafe {
+            BelaApp::create_auxiliary_task(&mut another_print_task, 10, "printing_more_stuff")
+        });
         Ok(())
     };
 

@@ -35,9 +35,7 @@ fn go() -> Result<(), error::Error> {
         }
     };
 
-    let state = State {
-        idx: 0,
-    };
+    let state = State { idx: 0 };
 
     let user_data = AppData::new(state, &mut render, Some(&mut setup), Some(&mut cleanup));
 

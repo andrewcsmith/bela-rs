@@ -1,12 +1,12 @@
-extern crate nix;
-extern crate libc;
 extern crate bela_sys;
+extern crate libc;
+extern crate nix;
 
-use bela_sys::{BelaInitSettings, BelaContext};
+use bela_sys::{BelaContext, BelaInitSettings};
 use std::convert::TryInto;
-use std::{thread, time};
-use std::{mem, slice};
 use std::marker::PhantomData;
+use std::{mem, slice};
+use std::{thread, time};
 
 pub mod error;
 
@@ -74,16 +74,23 @@ pub struct Bela<T> {
     user_data: T,
 }
 
-unsafe extern "C" fn render_trampoline<'a, T>(context: *mut BelaContext, user_data: *mut std::os::raw::c_void)
-where T: UserData<'a> + 'a
+unsafe extern "C" fn render_trampoline<'a, T>(
+    context: *mut BelaContext,
+    user_data: *mut std::os::raw::c_void,
+) where
+    T: UserData<'a> + 'a,
 {
     let mut context = Context::new(context);
     let user_data: &mut T = mem::transmute(user_data);
     user_data.render_fn(&mut context);
 }
 
-unsafe extern "C" fn setup_trampoline<'a, T>(context: *mut BelaContext, user_data: *mut std::os::raw::c_void) -> bool
-where T: UserData<'a> + 'a
+unsafe extern "C" fn setup_trampoline<'a, T>(
+    context: *mut BelaContext,
+    user_data: *mut std::os::raw::c_void,
+) -> bool
+where
+    T: UserData<'a> + 'a,
 {
     let mut context = Context::new(context);
     let user_data: &mut T = mem::transmute(user_data);
@@ -93,8 +100,11 @@ where T: UserData<'a> + 'a
     }
 }
 
-unsafe extern "C" fn cleanup_trampoline<'a, T>(context: *mut BelaContext, user_data: *mut std::os::raw::c_void)
-where T: UserData<'a> + 'a
+unsafe extern "C" fn cleanup_trampoline<'a, T>(
+    context: *mut BelaContext,
+    user_data: *mut std::os::raw::c_void,
+) where
+    T: UserData<'a> + 'a,
 {
     let mut context = Context::new(context);
     let user_data: &mut T = mem::transmute(user_data);
@@ -103,7 +113,8 @@ where T: UserData<'a> + 'a
 
 /// The "args" here must include the actual auxiliary task callback!
 unsafe extern "C" fn auxiliary_task_trampoline<T>(aux_ptr: *mut std::os::raw::c_void)
-where T: Auxiliary
+where
+    T: Auxiliary,
 {
     let auxiliary: &mut T = mem::transmute(aux_ptr);
     let (callback, args) = auxiliary.destructure();
@@ -126,7 +137,8 @@ pub trait Auxiliary {
 }
 
 impl<T> Auxiliary for Box<T>
-where T: Auxiliary + ?Sized
+where
+    T: Auxiliary + ?Sized,
 {
     type Args = T::Args;
 
@@ -159,22 +171,25 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
     }
 
     pub fn set_render<F: 'a>(&mut self, func: &'a mut F)
-    where F: FnMut(&mut Context, T::Data),
-          for<'r, 's> F: FnMut(&'r mut Context, &'s mut T::Data)
+    where
+        F: FnMut(&mut Context, T::Data),
+        for<'r, 's> F: FnMut(&'r mut Context, &'s mut T::Data),
     {
         self.user_data.set_render_fn(func);
     }
 
     pub fn set_setup<F: 'a>(&mut self, func: &'a mut F)
-    where F: FnMut(&mut Context, T::Data) -> bool,
-          for<'r, 's> F: FnMut(&'r mut Context, &'s mut T::Data) -> Result<(), error::Error>
+    where
+        F: FnMut(&mut Context, T::Data) -> bool,
+        for<'r, 's> F: FnMut(&'r mut Context, &'s mut T::Data) -> Result<(), error::Error>,
     {
         self.user_data.set_setup_fn(Some(func));
     }
 
     pub fn set_cleanup<F: 'a>(&mut self, func: &'a mut F)
-    where F: FnMut(&mut Context, T::Data),
-          for<'r, 's> F: FnMut(&'r mut Context, &'s mut T::Data)
+    where
+        F: FnMut(&mut Context, T::Data),
+        for<'r, 's> F: FnMut(&'r mut Context, &'s mut T::Data),
     {
         self.user_data.set_cleanup_fn(Some(func));
     }
@@ -192,7 +207,7 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
             0 => {
                 self.initialized = true;
                 Ok(())
-            },
+            }
             _ => Err(error::Error::Init),
         }
     }
@@ -202,9 +217,7 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
             return Err(error::Error::Start);
         }
 
-        let out = unsafe {
-            bela_sys::Bela_startAudio()
-        };
+        let out = unsafe { bela_sys::Bela_startAudio() };
 
         match out {
             0 => Ok(()),
@@ -224,8 +237,13 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
     /// particular implementation is wildly unsafe, but if you use a stack
     /// closure it _should_ be possible to avoid a segfault. See the
     /// auxiliary_task example for a demo.
-    pub unsafe fn create_auxiliary_task<'b, 'c, A: 'b>(task: &'c mut A, priority: i32, name: &'static str) -> CreatedTask<'b>
-    where A: Auxiliary
+    pub unsafe fn create_auxiliary_task<'b, 'c, A: 'b>(
+        task: &'c mut A,
+        priority: i32,
+        name: &'static str,
+    ) -> CreatedTask<'b>
+    where
+        A: Auxiliary,
     {
         let task_ptr = task as *const _ as *mut std::os::raw::c_void;
 
@@ -241,11 +259,8 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
         CreatedTask(aux_task, PhantomData)
     }
 
-    pub fn schedule_auxiliary_task(task: &CreatedTask) -> Result<(), error::Error>
-    {
-        let res = unsafe {
-            bela_sys::Bela_scheduleAuxiliaryTask(task.0)
-        };
+    pub fn schedule_auxiliary_task(task: &CreatedTask) -> Result<(), error::Error> {
+        let res = unsafe { bela_sys::Bela_scheduleAuxiliaryTask(task.0) };
 
         match res {
             0 => Ok(()),
@@ -254,11 +269,15 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
     }
 
     pub fn stop_audio(&self) {
-        unsafe { bela_sys::Bela_stopAudio(); }
+        unsafe {
+            bela_sys::Bela_stopAudio();
+        }
     }
 
     pub fn cleanup_audio(&self) {
-        unsafe { bela_sys::Bela_cleanupAudio(); }
+        unsafe {
+            bela_sys::Bela_cleanupAudio();
+        }
     }
 }
 
@@ -269,9 +288,7 @@ pub struct Context {
 
 impl Context {
     pub fn new(context: *mut BelaContext) -> Context {
-        Context {
-            context
-        }
+        Context { context }
     }
 
     pub fn context_mut_ptr(&mut self) -> *mut BelaContext {
@@ -361,87 +378,59 @@ impl Context {
     }
 
     pub fn audio_frames(&self) -> usize {
-        unsafe {
-            (*self.context).audioFrames as usize
-        }
+        unsafe { (*self.context).audioFrames as usize }
     }
 
     pub fn audio_in_channels(&self) -> usize {
-        unsafe {
-            (*self.context).audioInChannels as usize
-        }
+        unsafe { (*self.context).audioInChannels as usize }
     }
 
     pub fn audio_out_channels(&self) -> usize {
-        unsafe {
-            (*self.context).audioOutChannels as usize
-        }
+        unsafe { (*self.context).audioOutChannels as usize }
     }
 
-    pub fn  audio_sample_rate(&self) -> f32 {
-        unsafe {
-            (*self.context).audioSampleRate
-        }
+    pub fn audio_sample_rate(&self) -> f32 {
+        unsafe { (*self.context).audioSampleRate }
     }
 
     pub fn analog_frames(&self) -> usize {
-      unsafe {
-          (*self.context).analogFrames as usize
-      }
+        unsafe { (*self.context).analogFrames as usize }
     }
 
     pub fn analog_in_channels(&self) -> usize {
-        unsafe {
-            (*self.context).analogInChannels as usize
-        }
+        unsafe { (*self.context).analogInChannels as usize }
     }
 
     pub fn analog_out_channels(&self) -> usize {
-        unsafe {
-            (*self.context).analogOutChannels as usize
-        }
+        unsafe { (*self.context).analogOutChannels as usize }
     }
 
-    pub fn  analog_sample_rate(&self) -> f32 {
-        unsafe {
-            (*self.context).analogSampleRate
-        }
+    pub fn analog_sample_rate(&self) -> f32 {
+        unsafe { (*self.context).analogSampleRate }
     }
 
     pub fn digital_frames(&self) -> usize {
-      unsafe {
-          (*self.context).digitalFrames as usize
-      }
+        unsafe { (*self.context).digitalFrames as usize }
     }
 
     pub fn digital_channels(&self) -> usize {
-        unsafe {
-            (*self.context).digitalChannels as usize
-        }
+        unsafe { (*self.context).digitalChannels as usize }
     }
 
-    pub fn  digital_sample_rate(&self) -> f32 {
-        unsafe {
-            (*self.context).digitalSampleRate
-        }
+    pub fn digital_sample_rate(&self) -> f32 {
+        unsafe { (*self.context).digitalSampleRate }
     }
 
     pub fn audio_frames_elapsed(&self) -> usize {
-        unsafe {
-            (*self.context).audioFramesElapsed as usize
-        }
+        unsafe { (*self.context).audioFramesElapsed as usize }
     }
 
     pub fn multiplexer_channels(&self) -> usize {
-      unsafe {
-          (*self.context).multiplexerChannels as usize
-      }
+        unsafe { (*self.context).multiplexerChannels as usize }
     }
 
     pub fn multiplexer_starting_channels(&self) -> usize {
-      unsafe {
-          (*self.context).multiplexerStartingChannel as usize
-      }
+        unsafe { (*self.context).multiplexerStartingChannel as usize }
     }
 
     pub fn multiplexer_analog_in(&self) -> &[f32] {
@@ -454,15 +443,11 @@ impl Context {
     }
 
     pub fn multiplexer_enabled(&self) -> u32 {
-        unsafe {
-            (*self.context).audioExpanderEnabled
-        }
+        unsafe { (*self.context).audioExpanderEnabled }
     }
 
     pub fn flags(&self) -> u32 {
-        unsafe {
-            (*self.context).flags
-        }
+        unsafe { (*self.context).flags }
     }
 
     // Returns the value of a given digital input at the given frame number
@@ -498,8 +483,12 @@ impl Context {
         let digital = self.digital_mut();
         for i in frame..digital.len() {
             match mode {
-                DigitalDirection::INPUT => { digital[i] |= 1 << channel; }
-                DigitalDirection::OUTPUT => { digital[i] &= !(1 << channel); }
+                DigitalDirection::INPUT => {
+                    digital[i] |= 1 << channel;
+                }
+                DigitalDirection::OUTPUT => {
+                    digital[i] &= !(1 << channel);
+                }
             }
         }
     }
@@ -508,8 +497,12 @@ impl Context {
     pub fn pin_mode_once(&mut self, frame: usize, channel: usize, mode: DigitalDirection) {
         let digital = self.digital_mut();
         match mode {
-            DigitalDirection::INPUT => { digital[frame] |= 1 << channel; }
-            DigitalDirection::OUTPUT => { digital[frame] &= !(1 << channel); }
+            DigitalDirection::INPUT => {
+                digital[frame] |= 1 << channel;
+            }
+            DigitalDirection::OUTPUT => {
+                digital[frame] &= !(1 << channel);
+            }
         }
     }
 }
@@ -520,7 +513,10 @@ pub trait UserData<'a> {
     fn render_fn(&mut self, &mut Context);
     fn set_render_fn(&mut self, &'a mut dyn FnMut(&mut Context, &mut Self::Data));
     fn setup_fn(&mut self, &mut Context) -> Result<(), error::Error>;
-    fn set_setup_fn(&mut self, Option<&'a mut dyn FnMut(&mut Context, &mut Self::Data) -> Result<(), error::Error>>);
+    fn set_setup_fn(
+        &mut self,
+        Option<&'a mut dyn FnMut(&mut Context, &mut Self::Data) -> Result<(), error::Error>>,
+    );
     fn cleanup_fn(&mut self, &mut Context);
     fn set_cleanup_fn(&mut self, Option<&'a mut dyn FnMut(&mut Context, &mut Self::Data)>);
 }
@@ -533,11 +529,12 @@ pub struct AppData<'a, D: 'a> {
 }
 
 impl<'a, D> AppData<'a, D> {
-    pub fn new(data: D,
+    pub fn new(
+        data: D,
         render: &'a mut dyn FnMut(&mut Context, &mut D),
         setup: Option<&'a mut dyn FnMut(&mut Context, &mut D) -> Result<(), error::Error>>,
-        cleanup: Option<&'a mut dyn FnMut(&mut Context, &mut D)>) -> AppData<'a, D>
-    {
+        cleanup: Option<&'a mut dyn FnMut(&mut Context, &mut D)>,
+    ) -> AppData<'a, D> {
         AppData {
             data,
             render,
@@ -551,11 +548,7 @@ impl<'a, D> UserData<'a> for AppData<'a, D> {
     type Data = D;
 
     fn render_fn(&mut self, context: &mut Context) {
-        let AppData {
-            render,
-            data,
-            ..
-        } = self;
+        let AppData { render, data, .. } = self;
 
         render(context, data)
     }
@@ -565,11 +558,7 @@ impl<'a, D> UserData<'a> for AppData<'a, D> {
     }
 
     fn setup_fn(&mut self, context: &mut Context) -> Result<(), error::Error> {
-        let AppData {
-            setup,
-            data,
-            ..
-        } = self;
+        let AppData { setup, data, .. } = self;
 
         match setup {
             Some(f) => f(context, data),
@@ -577,16 +566,17 @@ impl<'a, D> UserData<'a> for AppData<'a, D> {
         }
     }
 
-    fn set_setup_fn(&mut self, callback: Option<&'a mut (dyn FnMut(&mut Context, &mut D) -> Result<(), error::Error> + 'a)>) {
+    fn set_setup_fn(
+        &mut self,
+        callback: Option<
+            &'a mut (dyn FnMut(&mut Context, &mut D) -> Result<(), error::Error> + 'a),
+        >,
+    ) {
         self.setup = callback;
     }
 
     fn cleanup_fn(&mut self, context: &mut Context) {
-        let AppData {
-            cleanup,
-            data,
-            ..
-        } = self;
+        let AppData { cleanup, data, .. } = self;
 
         match cleanup {
             Some(f) => f(context, data),
@@ -683,14 +673,14 @@ impl InitSettings {
     pub fn begin_muted(&self) -> bool {
         match self.settings.beginMuted {
             0 => false,
-            _ => true
+            _ => true,
         }
     }
 
     pub fn set_begin_muted(&mut self, val: bool) {
         self.settings.beginMuted = match val {
             true => 1,
-            false => 0
+            false => 0,
         };
     }
 
@@ -769,112 +759,112 @@ impl InitSettings {
     pub fn detect_underruns(&self) -> bool {
         match self.settings.detectUnderruns {
             0 => false,
-            _ => true
+            _ => true,
         }
     }
 
     pub fn set_detect_underruns(&mut self, val: bool) {
         self.settings.detectUnderruns = match val {
             true => 1,
-            false => 0
+            false => 0,
         };
     }
 
     pub fn verbose(&self) -> bool {
         match self.settings.verbose {
             0 => false,
-            _ => true
+            _ => true,
         }
     }
 
     pub fn set_verbose(&mut self, val: bool) {
         self.settings.verbose = match val {
             true => 1,
-            false => 0
+            false => 0,
         };
     }
 
     pub fn enable_led(&self) -> bool {
         match self.settings.enableLED {
             0 => false,
-            _ => true
+            _ => true,
         }
     }
 
     pub fn set_enable_led(&mut self, val: bool) {
         self.settings.enableLED = match val {
             true => 1,
-            false => 0
+            false => 0,
         };
     }
 
     pub fn stop_button_pin(&self) -> Option<i8> {
         match self.settings.stopButtonPin {
             0..=127 => Some(self.settings.stopButtonPin as _),
-            _ => None
+            _ => None,
         }
     }
 
     pub fn set_stop_button_pin(&mut self, val: Option<i8>) {
         self.settings.stopButtonPin = match val {
             Some(v) if v >= 0 => v as _,
-            _ => -1
+            _ => -1,
         };
     }
 
     pub fn high_performance_mode(&self) -> bool {
         match self.settings.highPerformanceMode {
             0 => false,
-            _ => true
+            _ => true,
         }
     }
 
     pub fn set_high_performance_mode(&mut self, val: bool) {
         self.settings.highPerformanceMode = match val {
             true => 1,
-            false => 0
+            false => 0,
         };
     }
 
     pub fn interleave(&self) -> bool {
         match self.settings.interleave {
             0 => false,
-            _ => true
+            _ => true,
         }
     }
 
     pub fn set_interleave(&mut self, val: bool) {
         self.settings.interleave = match val {
             true => 1,
-            false => 0
+            false => 0,
         };
     }
 
     pub fn analog_outputs_persist(&self) -> bool {
         match self.settings.analogOutputsPersist {
             0 => false,
-            _ => true
+            _ => true,
         }
     }
 
     pub fn set_analog_outputs_persist(&mut self, val: bool) {
         self.settings.analogOutputsPersist = match val {
             true => 1,
-            false => 0
+            false => 0,
         };
     }
 
     pub fn uniform_sample_rate(&self) -> bool {
         match self.settings.uniformSampleRate {
             0 => false,
-            _ => true
+            _ => true,
         }
     }
 
     pub fn set_uniform_sample_rate(&mut self, val: bool) {
         self.settings.uniformSampleRate = match val {
             true => 1,
-            false => 0
+            false => 0,
         };
     }
 
@@ -897,14 +887,14 @@ impl InitSettings {
     pub fn amp_mute_pin(&self) -> Option<i8> {
         match self.settings.ampMutePin {
             0..=127 => Some(self.settings.ampMutePin as _),
-            _ => None
+            _ => None,
         }
     }
 
     pub fn set_amp_mute_pin(&mut self, val: Option<i8>) {
         self.settings.ampMutePin = match val {
             Some(v) if v >= 0 => v as _,
-            _ => -1
+            _ => -1,
         };
     }
 
@@ -927,8 +917,6 @@ impl Default for InitSettings {
             settings.assume_init()
         };
 
-        InitSettings {
-            settings
-        }
+        InitSettings { settings }
     }
 }
