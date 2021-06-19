@@ -12,3 +12,6 @@ sample = { package = "dasp", version = "0.11.0", features = [ "signal", "slice" 
 
 [dependencies.bela-sys]
 git = "https://github.com/andrewcsmith/bela-sys.git"
+
+[features]
+static = [ "bela-sys/static" ]
