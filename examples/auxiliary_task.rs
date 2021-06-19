@@ -64,8 +64,8 @@ fn go() -> Result<(), error::Error> {
 
     let mut setup = |_context: &mut Context, user_data: &mut MyData| -> Result<(), error::Error> {
         println!("Setting up");
-        user_data.tasks.push(BelaApp::create_auxiliary_task(&mut boxed, 10, "printing_stuff"));
-        user_data.tasks.push(BelaApp::create_auxiliary_task(&mut another_print_task, 10, "printing_more_stuff"));
+        user_data.tasks.push(unsafe { BelaApp::create_auxiliary_task(&mut boxed, 10, "printing_stuff") });
+        user_data.tasks.push(unsafe { BelaApp::create_auxiliary_task(&mut another_print_task, 10, "printing_more_stuff") });
         Ok(())
     };
 

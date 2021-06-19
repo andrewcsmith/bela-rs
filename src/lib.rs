@@ -219,16 +219,17 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
     /// Takes a _mutable reference_ to the task, because we must be ensured that
     /// the task is unique and that it does not move.
     ///
+    /// # Safety
     /// I highly recommend ONLY USING STACK-ALLOCATED CLOSURES AS TASKS. This
     /// particular implementation is wildly unsafe, but if you use a stack
     /// closure it _should_ be possible to avoid a segfault. See the
     /// auxiliary_task example for a demo.
-    pub fn create_auxiliary_task<'b, 'c, A: 'b>(task: &'c mut A, priority: i32, name: &'static str) -> CreatedTask<'b>
+    pub unsafe fn create_auxiliary_task<'b, 'c, A: 'b>(task: &'c mut A, priority: i32, name: &'static str) -> CreatedTask<'b>
     where A: Auxiliary
     {
         let task_ptr = task as *const _ as *mut std::os::raw::c_void;
 
-        let aux_task = unsafe {
+        let aux_task = {
             bela_sys::Bela_createAuxiliaryTask(
                 Some(auxiliary_task_trampoline::<A>),
                 priority,
