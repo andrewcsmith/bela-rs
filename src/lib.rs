@@ -3,6 +3,7 @@ extern crate libc;
 extern crate bela_sys;
 
 use bela_sys::{BelaInitSettings, BelaContext};
+use std::convert::TryInto;
 use std::{thread, time};
 use std::{mem, slice};
 use std::marker::PhantomData;
@@ -12,6 +13,34 @@ pub mod error;
 pub enum DigitalDirection {
     INPUT,
     OUTPUT,
+}
+
+#[repr(C)]
+pub enum BelaHw {
+    NoHw = bela_sys::BelaHw_BelaHw_NoHw as isize,
+    Bela = bela_sys::BelaHw_BelaHw_Bela as isize,
+    BelaMini = bela_sys::BelaHw_BelaHw_BelaMini as isize,
+    Salt = bela_sys::BelaHw_BelaHw_Salt as isize,
+    CtagFace = bela_sys::BelaHw_BelaHw_CtagFace as isize,
+    CtagBeast = bela_sys::BelaHw_BelaHw_CtagBeast as isize,
+    CtagFaceBela = bela_sys::BelaHw_BelaHw_CtagFaceBela as isize,
+    CtagBeastBela = bela_sys::BelaHw_BelaHw_CtagBeastBela as isize,
+}
+
+impl BelaHw {
+    fn from_i32(v: i32) -> Option<BelaHw> {
+        match v {
+            bela_sys::BelaHw_BelaHw_NoHw => Some(BelaHw::NoHw),
+            bela_sys::BelaHw_BelaHw_Bela => Some(BelaHw::Bela),
+            bela_sys::BelaHw_BelaHw_BelaMini => Some(BelaHw::BelaMini),
+            bela_sys::BelaHw_BelaHw_Salt => Some(BelaHw::Salt),
+            bela_sys::BelaHw_BelaHw_CtagFace => Some(BelaHw::CtagFace),
+            bela_sys::BelaHw_BelaHw_CtagBeast => Some(BelaHw::CtagBeast),
+            bela_sys::BelaHw_BelaHw_CtagFaceBela => Some(BelaHw::CtagFaceBela),
+            bela_sys::BelaHw_BelaHw_CtagBeastBela => Some(BelaHw::CtagBeastBela),
+            _ => None,
+        }
+    }
 }
 
 /// The `Bela` struct is essentially built to ensure that the type parameter
@@ -184,9 +213,7 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
     }
 
     pub fn should_stop(&self) -> bool {
-        unsafe {
-            bela_sys::gShouldStop != 0
-        }
+        unsafe { bela_sys::Bela_stopRequested() != 0 }
     }
 
     /// Takes a _mutable reference_ to the task, because we must be ensured that
@@ -265,7 +292,7 @@ impl Context {
             let context = self.context_mut_ptr();
             let n_frames = (*context).audioFrames;
             let n_channels = (*context).audioOutChannels;
-            let audio_out_ptr = (*context).audioOut as *mut f32;
+            let audio_out_ptr = (*context).audioOut;
             slice::from_raw_parts_mut(audio_out_ptr, (n_frames * n_channels) as usize)
         }
     }
@@ -278,7 +305,7 @@ impl Context {
             let context = self.context_ptr();
             let n_frames = (*context).audioFrames;
             let n_channels = (*context).audioInChannels;
-            let audio_in_ptr = (*context).audioIn as *const f32;
+            let audio_in_ptr = (*context).audioIn;
             slice::from_raw_parts(audio_in_ptr, (n_frames * n_channels) as usize)
         }
     }
@@ -292,7 +319,7 @@ impl Context {
             let context = self.context_ptr();
             let n_frames = (*context).digitalFrames;
             let n_channels = (*context).digitalChannels;
-            let digital_ptr = (*context).digital as *mut u32;
+            let digital_ptr = (*context).digital;
             slice::from_raw_parts_mut(digital_ptr, (n_frames * n_channels) as usize)
         }
     }
@@ -306,7 +333,7 @@ impl Context {
             let context = self.context_ptr();
             let n_frames = (*context).analogFrames;
             let n_channels = (*context).analogOutChannels;
-            let analog_out_ptr = (*context).analogOut as *mut f32;
+            let analog_out_ptr = (*context).analogOut;
             slice::from_raw_parts_mut(analog_out_ptr, (n_frames * n_channels) as usize)
         }
     }
@@ -316,7 +343,7 @@ impl Context {
         unsafe {
             let n_frames = (*self.context).analogFrames;
             let n_channels = (*self.context).analogInChannels;
-            let analog_in_ptr = (*self.context).analogIn as *mut f32;
+            let analog_in_ptr = (*self.context).analogIn;
             slice::from_raw_parts(analog_in_ptr, (n_frames * n_channels) as usize)
         }
     }
@@ -405,12 +432,12 @@ impl Context {
       }
     }
 
-    pub fn multiplexer_analog_in(&self) -> &mut [f32] {
+    pub fn multiplexer_analog_in(&self) -> &[f32] {
         unsafe {
             let n_frames = (*self.context).analogFrames;
             let n_channels = (*self.context).multiplexerChannels;
-            let analog_in_ptr = (*self.context).multiplexerAnalogIn as *mut f32;
-            slice::from_raw_parts_mut(analog_in_ptr, (n_frames * n_channels) as usize)
+            let analog_in_ptr = (*self.context).multiplexerAnalogIn;
+            slice::from_raw_parts(analog_in_ptr, (n_frames * n_channels) as usize)
         }
     }
 
@@ -582,7 +609,7 @@ impl InitSettings {
     /// depends on relative sample rates of the two. By default, audio is twice
     /// the sample rate, so has twice the period size.
     pub fn set_period_size(&mut self, size: usize) {
-        self.settings.periodSize = size as i32
+        self.settings.periodSize = size.try_into().unwrap();
     }
 
     /// Get whether to use the analog input and output
@@ -617,28 +644,12 @@ impl InitSettings {
         };
     }
 
-    pub fn num_audio_in_channels(&self) -> usize {
-        self.settings.numAudioInChannels as usize
-    }
-
-    pub fn set_num_audio_in_channels(&mut self, num: usize) {
-        self.settings.numAudioInChannels = num as i32;
-    }
-
-    pub fn num_audio_out_channels(&self) -> usize {
-        self.settings.numAudioOutChannels as usize
-    }
-
-    pub fn set_num_audio_out_channels(&mut self, num: usize) {
-        self.settings.numAudioOutChannels = num as i32;
-    }
-
     pub fn num_analog_in_channels(&self) -> usize {
         self.settings.numAnalogInChannels as usize
     }
 
     pub fn set_num_analog_in_channels(&mut self, num: usize) {
-        self.settings.numAnalogInChannels = num as i32;
+        self.settings.numAnalogInChannels = num.try_into().unwrap();
     }
 
     pub fn num_analog_out_channels(&self) -> usize {
@@ -646,7 +657,7 @@ impl InitSettings {
     }
 
     pub fn set_num_analog_out_channels(&mut self, num: usize) {
-        self.settings.numAnalogOutChannels = num as i32;
+        self.settings.numAnalogOutChannels = num.try_into().unwrap();
     }
 
     pub fn num_digital_channels(&self) -> usize {
@@ -654,7 +665,7 @@ impl InitSettings {
     }
 
     pub fn set_num_digital_channels(&mut self, num: usize) {
-        self.settings.numDigitalChannels = num as i32;
+        self.settings.numDigitalChannels = num.try_into().unwrap();
     }
 
     pub fn begin_muted(&self) -> bool {
@@ -708,7 +719,7 @@ impl InitSettings {
     }
 
     pub fn set_num_mux_channels(&mut self, val: usize) {
-        self.settings.numMuxChannels = val as i32;
+        self.settings.numMuxChannels = val.try_into().unwrap();
     }
 
     pub fn audio_expander_inputs(&self) -> usize {
@@ -716,7 +727,7 @@ impl InitSettings {
     }
 
     pub fn set_audio_expander_inputs(&mut self, val: usize) {
-        self.settings.audioExpanderInputs = val as u32;
+        self.settings.audioExpanderInputs = val.try_into().unwrap();
     }
 
     pub fn audio_expander_outputs(&self) -> usize {
@@ -724,7 +735,7 @@ impl InitSettings {
     }
 
     pub fn set_audio_expander_outputs(&mut self, val: usize) {
-        self.settings.audioExpanderOutputs = val as u32;
+        self.settings.audioExpanderOutputs = val.try_into().unwrap();
     }
 
     pub fn pru_number(&self) -> usize {
@@ -732,7 +743,7 @@ impl InitSettings {
     }
 
     pub fn set_pru_number(&mut self, val: usize) {
-        self.settings.pruNumber = val as i32;
+        self.settings.pruNumber = val.try_into().unwrap();
     }
 
     pub fn pru_filename(&self) -> [u8; 256] {
@@ -785,19 +796,19 @@ impl InitSettings {
         };
     }
 
-    // pub fn enable_cape_button_monitoring(&self) -> bool {
-    //     match self.settings.enableCapeButtonMonitoring {
-    //         0 => false,
-    //         _ => true
-    //     }
-    // }
+    pub fn stop_button_pin(&self) -> Option<i8> {
+        match self.settings.stopButtonPin {
+            0..=127 => Some(self.settings.stopButtonPin as _),
+            _ => None
+        }
+    }
 
-    // pub fn set_enable_cape_button_monitoring(&mut self, val: bool) {
-    //     self.settings.enableCapeButtonMonitoring = match val {
-    //         true => 1,
-    //         false => 0
-    //     };
-    // }
+    pub fn set_stop_button_pin(&mut self, val: Option<i8>) {
+        self.settings.stopButtonPin = match val {
+            Some(v) if v >= 0 => v as _,
+            _ => -1
+        };
+    }
 
     pub fn high_performance_mode(&self) -> bool {
         match self.settings.highPerformanceMode {
@@ -860,7 +871,7 @@ impl InitSettings {
     }
 
     pub fn set_audio_thread_stack_size(&mut self, num: usize) {
-        self.settings.audioThreadStackSize = num as u32;
+        self.settings.audioThreadStackSize = num.try_into().unwrap();
     }
 
     pub fn auxiliary_task_stack_size(&self) -> usize {
@@ -868,48 +879,32 @@ impl InitSettings {
     }
 
     pub fn set_auxiliary_task_stack_size(&mut self, num: usize) {
-        self.settings.auxiliaryTaskStackSize = num as u32;
+        self.settings.auxiliaryTaskStackSize = num.try_into().unwrap();
     }
 
-    // pub fn codec_i2c_address(&self) -> usize {
-    //     self.settings.codecI2CAddress as usize
-    // }
-
-    // pub fn set_codec_i2c_address(&mut self, num: usize) {
-    //     self.settings.codecI2CAddress = num as i32;
-    // }
-
-    pub fn amp_mute_pin(&self) -> usize {
-        self.settings.ampMutePin as usize
+    pub fn amp_mute_pin(&self) -> Option<i8> {
+        match self.settings.ampMutePin {
+            0..=127 => Some(self.settings.ampMutePin as _),
+            _ => None
+        }
     }
 
-    pub fn set_amp_mute_pin(&mut self, num: usize) {
-        self.settings.ampMutePin = num as i32;
+    pub fn set_amp_mute_pin(&mut self, val: Option<i8>) {
+        self.settings.ampMutePin = match val {
+            Some(v) if v >= 0 => v as _,
+            _ => -1
+        };
     }
 
-    // pub fn receive_port(&self) -> usize {
-    //     self.settings.receivePort as usize
-    // }
+    /// Get user selected board to work with (as opposed to detected hardware).
+    pub fn board(&self) -> BelaHw {
+        BelaHw::from_i32(self.settings.board).expect("unexpected board type")
+    }
 
-    // pub fn set_receive_port(&mut self, num: usize) {
-    //     self.settings.receivePort = num as i32;
-    // }
-
-    // pub fn transmit_port(&self) -> usize {
-    //     self.settings.transmitPort as usize
-    // }
-
-    // pub fn set_transmit_port(&mut self, num: usize) {
-    //     self.settings.transmitPort = num as i32;
-    // }
-
-    // pub fn server_name(&self) -> [u8; 256] {
-    //     self.settings.serverName
-    // }
-
-    // pub fn set_server_name(&mut self, val: [u8; 256]) {
-    //     self.settings.serverName = val;
-    // }
+    /// Set user selected board to work with (as opposed to detected hardware).
+    pub fn set_board(&mut self, board: BelaHw) {
+        self.settings.board = board as _;
+    }
 }
 
 impl Default for InitSettings {
