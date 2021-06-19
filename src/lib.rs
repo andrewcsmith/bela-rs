@@ -81,7 +81,7 @@ unsafe extern "C" fn render_trampoline<'a, T>(
     T: UserData<'a> + 'a,
 {
     let mut context = Context::new(context);
-    let user_data: &mut T = mem::transmute(user_data);
+    let user_data = &mut *(user_data as *mut T);
     user_data.render_fn(&mut context);
 }
 
@@ -93,11 +93,8 @@ where
     T: UserData<'a> + 'a,
 {
     let mut context = Context::new(context);
-    let user_data: &mut T = mem::transmute(user_data);
-    match user_data.setup_fn(&mut context) {
-        Ok(_) => true,
-        Err(_) => false,
-    }
+    let user_data = &mut *(user_data as *mut T);
+    user_data.setup_fn(&mut context).is_ok()
 }
 
 unsafe extern "C" fn cleanup_trampoline<'a, T>(
@@ -107,7 +104,7 @@ unsafe extern "C" fn cleanup_trampoline<'a, T>(
     T: UserData<'a> + 'a,
 {
     let mut context = Context::new(context);
-    let user_data: &mut T = mem::transmute(user_data);
+    let user_data = &mut *(user_data as *mut T);
     user_data.cleanup_fn(&mut context);
 }
 
@@ -116,7 +113,7 @@ unsafe extern "C" fn auxiliary_task_trampoline<T>(aux_ptr: *mut std::os::raw::c_
 where
     T: Auxiliary,
 {
-    let auxiliary: &mut T = mem::transmute(aux_ptr);
+    let auxiliary = &mut *(aux_ptr as *mut T);
     let (callback, args) = auxiliary.destructure();
     callback(args);
 }
@@ -451,27 +448,27 @@ impl Context {
     }
 
     // Returns the value of a given digital input at the given frame number
-    pub fn digital_read(&self, frame: usize, channel: usize) -> u32 {
+    pub fn digital_read(&self, frame: usize, channel: usize) -> bool {
         let digital = self.digital();
-        (digital[frame] >> (channel + 16)) & 1
+        (digital[frame] >> (channel + 16)) & 1 != 0
     }
 
     // Sets a given digital output channel to a value for the current frame and all subsequent frames
-    pub fn digital_write(&mut self, frame: usize, channel: usize, value: usize) {
+    pub fn digital_write(&mut self, frame: usize, channel: usize, value: bool) {
         let digital = self.digital_mut();
-        for i in frame..digital.len() {
-            if value != 0 {
-                digital[i] |= 1 << (channel + 16);
+        for out in &mut digital[frame..] {
+            if value {
+                *out |= 1 << (channel + 16)
             } else {
-                digital[i] &= !(1 << (channel + 16));
+                *out &= !(1 << (channel + 16));
             }
         }
     }
 
     // Sets a given digital output channel to a value for the current frame only
-    pub fn digital_write_once(&mut self, frame: usize, channel: usize, value: usize) {
+    pub fn digital_write_once(&mut self, frame: usize, channel: usize, value: bool) {
         let digital = self.digital_mut();
-        if value != 0 {
+        if value {
             digital[frame] |= 1 << (channel + 16);
         } else {
             digital[frame] &= !(1 << (channel + 16));
@@ -481,13 +478,13 @@ impl Context {
     // Sets the direction of a digital pin for the current frame and all subsequent frames
     pub fn pin_mode(&mut self, frame: usize, channel: usize, mode: DigitalDirection) {
         let digital = self.digital_mut();
-        for i in frame..digital.len() {
+        for out in &mut digital[frame..] {
             match mode {
                 DigitalDirection::INPUT => {
-                    digital[i] |= 1 << channel;
+                    *out |= 1 << channel;
                 }
                 DigitalDirection::OUTPUT => {
-                    digital[i] &= !(1 << channel);
+                    *out &= !(1 << channel);
                 }
             }
         }
@@ -616,34 +613,22 @@ impl InitSettings {
 
     /// Get whether to use the analog input and output
     pub fn use_analog(&self) -> bool {
-        match self.settings.useAnalog {
-            0 => false,
-            _ => true,
-        }
+        self.settings.useAnalog != 0
     }
 
     /// Set whether to use the analog input and output
     pub fn set_use_analog(&mut self, use_analog: bool) {
-        self.settings.useAnalog = match use_analog {
-            true => 1,
-            false => 0,
-        };
+        self.settings.useAnalog = use_analog as _;
     }
 
     /// Get whether to use the digital input and output
     pub fn use_digital(&self) -> bool {
-        match self.settings.useDigital {
-            0 => false,
-            _ => true,
-        }
+        self.settings.useDigital != 0
     }
 
     /// Set whether to use the digital input and output
     pub fn set_use_digital(&mut self, use_digital: bool) {
-        self.settings.useDigital = match use_digital {
-            true => 1,
-            false => 0,
-        };
+        self.settings.useDigital = use_digital as _;
     }
 
     pub fn num_analog_in_channels(&self) -> usize {
@@ -671,17 +656,11 @@ impl InitSettings {
     }
 
     pub fn begin_muted(&self) -> bool {
-        match self.settings.beginMuted {
-            0 => false,
-            _ => true,
-        }
+        self.settings.beginMuted != 0
     }
 
     pub fn set_begin_muted(&mut self, val: bool) {
-        self.settings.beginMuted = match val {
-            true => 1,
-            false => 0,
-        };
+        self.settings.beginMuted = val as _;
     }
 
     pub fn dac_level(&self) -> f32 {
@@ -757,45 +736,27 @@ impl InitSettings {
     }
 
     pub fn detect_underruns(&self) -> bool {
-        match self.settings.detectUnderruns {
-            0 => false,
-            _ => true,
-        }
+        self.settings.detectUnderruns != 0
     }
 
     pub fn set_detect_underruns(&mut self, val: bool) {
-        self.settings.detectUnderruns = match val {
-            true => 1,
-            false => 0,
-        };
+        self.settings.detectUnderruns = val as _;
     }
 
     pub fn verbose(&self) -> bool {
-        match self.settings.verbose {
-            0 => false,
-            _ => true,
-        }
+        self.settings.verbose != 0
     }
 
     pub fn set_verbose(&mut self, val: bool) {
-        self.settings.verbose = match val {
-            true => 1,
-            false => 0,
-        };
+        self.settings.verbose = val as _;
     }
 
     pub fn enable_led(&self) -> bool {
-        match self.settings.enableLED {
-            0 => false,
-            _ => true,
-        }
+        self.settings.enableLED != 0
     }
 
     pub fn set_enable_led(&mut self, val: bool) {
-        self.settings.enableLED = match val {
-            true => 1,
-            false => 0,
-        };
+        self.settings.enableLED = val as _;
     }
 
     pub fn stop_button_pin(&self) -> Option<i8> {
@@ -813,59 +774,35 @@ impl InitSettings {
     }
 
     pub fn high_performance_mode(&self) -> bool {
-        match self.settings.highPerformanceMode {
-            0 => false,
-            _ => true,
-        }
+        self.settings.highPerformanceMode != 0
     }
 
     pub fn set_high_performance_mode(&mut self, val: bool) {
-        self.settings.highPerformanceMode = match val {
-            true => 1,
-            false => 0,
-        };
+        self.settings.highPerformanceMode = val as _;
     }
 
     pub fn interleave(&self) -> bool {
-        match self.settings.interleave {
-            0 => false,
-            _ => true,
-        }
+        self.settings.interleave != 0
     }
 
     pub fn set_interleave(&mut self, val: bool) {
-        self.settings.interleave = match val {
-            true => 1,
-            false => 0,
-        };
+        self.settings.interleave = val as _;
     }
 
     pub fn analog_outputs_persist(&self) -> bool {
-        match self.settings.analogOutputsPersist {
-            0 => false,
-            _ => true,
-        }
+        self.settings.analogOutputsPersist != 0
     }
 
     pub fn set_analog_outputs_persist(&mut self, val: bool) {
-        self.settings.analogOutputsPersist = match val {
-            true => 1,
-            false => 0,
-        };
+        self.settings.analogOutputsPersist = val as _;
     }
 
     pub fn uniform_sample_rate(&self) -> bool {
-        match self.settings.uniformSampleRate {
-            0 => false,
-            _ => true,
-        }
+        self.settings.uniformSampleRate != 0
     }
 
     pub fn set_uniform_sample_rate(&mut self, val: bool) {
-        self.settings.uniformSampleRate = match val {
-            true => 1,
-            false => 0,
-        };
+        self.settings.uniformSampleRate = val as _;
     }
 
     pub fn audio_thread_stack_size(&self) -> usize {

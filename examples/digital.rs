@@ -26,7 +26,7 @@ fn go() -> Result<(), error::Error> {
         let tenms_in_frames = (context.digital_sample_rate() / 100.) as usize;
         let hundreadms_in_frames = (tenms_in_frames * 10) as usize;
         for f in 0..context.digital_frames() {
-            let v = if state.idx < tenms_in_frames { 1 } else { 0 };
+            let v = state.idx < tenms_in_frames;
             context.digital_write_once(f, 0, v);
             state.idx += 1;
             if state.idx > hundreadms_in_frames {
