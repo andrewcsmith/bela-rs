@@ -311,11 +311,22 @@ impl Context {
         }
     }
 
-    /// Access the digital input/output slice
+    /// Access the digital input/output slice immutably
+    pub fn digital(&self) -> &[u32] {
+        unsafe {
+            let context = self.context_ptr();
+            let n_frames = (*context).digitalFrames;
+            let n_channels = (*context).digitalChannels;
+            let digital_ptr = (*context).digital;
+            slice::from_raw_parts(digital_ptr, (n_frames * n_channels) as usize)
+        }
+    }
+
+    /// Access the digital input/output slice mutably
     ///
     /// Mutably borrows self so that (hopefully) we do not have multiple mutable
     /// pointers to the digital buffer available simultaneously.
-    pub fn digital(&mut self) -> &mut [u32] {
+    pub fn digital_mut(&mut self) -> &mut [u32] {
         unsafe {
             let context = self.context_ptr();
             let n_frames = (*context).digitalFrames;
@@ -455,14 +466,14 @@ impl Context {
     }
 
     // Returns the value of a given digital input at the given frame number
-    pub fn digital_read(&mut self, frame: usize, channel: usize) -> u32 {
+    pub fn digital_read(&self, frame: usize, channel: usize) -> u32 {
         let digital = self.digital();
         (digital[frame] >> (channel + 16)) & 1
     }
 
     // Sets a given digital output channel to a value for the current frame and all subsequent frames
     pub fn digital_write(&mut self, frame: usize, channel: usize, value: usize) {
-        let digital = self.digital();
+        let digital = self.digital_mut();
         for i in frame..digital.len() {
             if value != 0 {
                 digital[i] |= 1 << (channel + 16);
@@ -474,7 +485,7 @@ impl Context {
 
     // Sets a given digital output channel to a value for the current frame only
     pub fn digital_write_once(&mut self, frame: usize, channel: usize, value: usize) {
-        let digital = self.digital();
+        let digital = self.digital_mut();
         if value != 0 {
             digital[frame] |= 1 << (channel + 16);
         } else {
@@ -484,7 +495,7 @@ impl Context {
 
     // Sets the direction of a digital pin for the current frame and all subsequent frames
     pub fn pin_mode(&mut self, frame: usize, channel: usize, mode: DigitalDirection) {
-        let digital = self.digital();
+        let digital = self.digital_mut();
         for i in frame..digital.len() {
             match mode {
                 DigitalDirection::INPUT => { digital[i] |= 1 << channel; }
@@ -495,7 +506,7 @@ impl Context {
 
     // Sets the direction of a digital pin for the current frame only
     pub fn pin_mode_once(&mut self, frame: usize, channel: usize, mode: DigitalDirection) {
-        let digital = self.digital();
+        let digital = self.digital_mut();
         match mode {
             DigitalDirection::INPUT => { digital[frame] |= 1 << channel; }
             DigitalDirection::OUTPUT => { digital[frame] &= !(1 << channel); }
