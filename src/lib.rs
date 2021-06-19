@@ -507,15 +507,20 @@ impl Context {
 pub trait UserData<'a> {
     type Data;
 
-    fn render_fn(&mut self, &mut Context);
-    fn set_render_fn(&mut self, &'a mut dyn FnMut(&mut Context, &mut Self::Data));
-    fn setup_fn(&mut self, &mut Context) -> Result<(), error::Error>;
+    fn render_fn(&mut self, context: &mut Context);
+    fn set_render_fn(&mut self, render_fn: &'a mut dyn FnMut(&mut Context, &mut Self::Data));
+    fn setup_fn(&mut self, context: &mut Context) -> Result<(), error::Error>;
     fn set_setup_fn(
         &mut self,
-        Option<&'a mut dyn FnMut(&mut Context, &mut Self::Data) -> Result<(), error::Error>>,
+        setup_fn: Option<
+            &'a mut dyn FnMut(&mut Context, &mut Self::Data) -> Result<(), error::Error>,
+        >,
     );
-    fn cleanup_fn(&mut self, &mut Context);
-    fn set_cleanup_fn(&mut self, Option<&'a mut dyn FnMut(&mut Context, &mut Self::Data)>);
+    fn cleanup_fn(&mut self, context: &mut Context);
+    fn set_cleanup_fn(
+        &mut self,
+        cleanup_fn: Option<&'a mut dyn FnMut(&mut Context, &mut Self::Data)>,
+    );
 }
 
 pub struct AppData<'a, D: 'a> {
