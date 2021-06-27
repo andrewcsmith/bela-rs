@@ -33,9 +33,7 @@ fn go() -> Result<(), error::Error> {
         }
     };
 
-    let phasor = Phasor {
-        idx: 0,
-    };
+    let phasor = Phasor { idx: 0 };
 
     let user_data = AppData::new(phasor, &mut render, Some(&mut setup), Some(&mut cleanup));
 
