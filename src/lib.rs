@@ -74,18 +74,18 @@ pub struct Bela<T> {
     user_data: T,
 }
 
-unsafe extern "C" fn render_trampoline<'a, T>(
+extern "C" fn render_trampoline<'a, T>(
     context: *mut BelaContext,
     user_data: *mut std::os::raw::c_void,
 ) where
     T: UserData<'a> + 'a,
 {
     let mut context = Context::new(context);
-    let user_data = &mut *(user_data as *mut T);
+    let user_data = unsafe { &mut *(user_data as *mut T) };
     user_data.render_fn(&mut context);
 }
 
-unsafe extern "C" fn setup_trampoline<'a, T>(
+extern "C" fn setup_trampoline<'a, T>(
     context: *mut BelaContext,
     user_data: *mut std::os::raw::c_void,
 ) -> bool
@@ -93,27 +93,27 @@ where
     T: UserData<'a> + 'a,
 {
     let mut context = Context::new(context);
-    let user_data = &mut *(user_data as *mut T);
+    let user_data = unsafe { &mut *(user_data as *mut T) };
     user_data.setup_fn(&mut context).is_ok()
 }
 
-unsafe extern "C" fn cleanup_trampoline<'a, T>(
+extern "C" fn cleanup_trampoline<'a, T>(
     context: *mut BelaContext,
     user_data: *mut std::os::raw::c_void,
 ) where
     T: UserData<'a> + 'a,
 {
     let mut context = Context::new(context);
-    let user_data = &mut *(user_data as *mut T);
+    let user_data = unsafe { &mut *(user_data as *mut T) };
     user_data.cleanup_fn(&mut context);
 }
 
 /// The "args" here must include the actual auxiliary task callback!
-unsafe extern "C" fn auxiliary_task_trampoline<T>(aux_ptr: *mut std::os::raw::c_void)
+extern "C" fn auxiliary_task_trampoline<T>(aux_ptr: *mut std::os::raw::c_void)
 where
     T: Auxiliary,
 {
-    let auxiliary = &mut *(aux_ptr as *mut T);
+    let auxiliary = unsafe { &mut *(aux_ptr as *mut T) };
     let (callback, args) = auxiliary.destructure();
     callback(args);
 }
@@ -128,7 +128,7 @@ pub trait Auxiliary {
     type Args: ?Sized;
 
     /// `destructure` should split the Auxiliary into the closure and its
-    /// arguments. This is called by the `unsafe extern` trampoline function to
+    /// arguments. This is called by the `extern "C"` trampoline function to
     /// actually run the task at the proper Xenomai priority.
     fn destructure(&mut self) -> (&mut dyn FnMut(&mut Self::Args), &mut Self::Args);
 }
@@ -196,8 +196,10 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
         settings.settings.render = Some(render_trampoline::<T>);
         settings.settings.cleanup = Some(cleanup_trampoline::<T>);
         let out = unsafe {
-            let ptr: *mut std::os::raw::c_void = mem::transmute(&mut self.user_data);
-            bela_sys::Bela_initAudio(settings.settings_ptr(), ptr)
+            bela_sys::Bela_initAudio(
+                settings.settings_ptr(),
+                &mut self.user_data as *mut _ as *mut _,
+            )
         };
 
         match out {
