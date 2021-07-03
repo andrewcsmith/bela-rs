@@ -2,7 +2,6 @@ extern crate bela_sys;
 
 use bela_sys::{BelaContext, BelaInitSettings};
 use std::convert::TryInto;
-use std::marker::PhantomData;
 use std::{mem, slice};
 use std::{thread, time};
 
@@ -106,43 +105,7 @@ extern "C" fn cleanup_trampoline<'a, T>(
     user_data.cleanup_fn(&mut context);
 }
 
-/// The "args" here must include the actual auxiliary task callback!
-extern "C" fn auxiliary_task_trampoline<T>(aux_ptr: *mut std::os::raw::c_void)
-where
-    T: Auxiliary,
-{
-    let auxiliary = unsafe { &mut *(aux_ptr as *mut T) };
-    let (callback, args) = auxiliary.destructure();
-    callback(args);
-}
-
-/// Trait for `AuxiliaryTask`s, which run at a lower priority than the audio
-/// thread.
-///
-/// An `AuxiliaryTask` must contain both its callback closure and its arguments;
-/// this is so that we can capture outer variables in the closure, and also
-/// mutate state if we need to in a type-safe way.
-pub trait Auxiliary {
-    type Args: ?Sized;
-
-    /// `destructure` should split the Auxiliary into the closure and its
-    /// arguments. This is called by the `extern "C"` trampoline function to
-    /// actually run the task at the proper Xenomai priority.
-    fn destructure(&mut self) -> (&mut dyn FnMut(&mut Self::Args), &mut Self::Args);
-}
-
-impl<T> Auxiliary for Box<T>
-where
-    T: Auxiliary + ?Sized,
-{
-    type Args = T::Args;
-
-    fn destructure(&mut self) -> (&mut dyn FnMut(&mut Self::Args), &mut Self::Args) {
-        T::destructure(self)
-    }
-}
-
-pub struct CreatedTask<'a>(bela_sys::AuxiliaryTask, PhantomData<&'a mut ()>);
+pub struct CreatedTask(bela_sys::AuxiliaryTask);
 
 impl<'a, T: UserData<'a> + 'a> Bela<T> {
     pub fn new(user_data: T) -> Self {
@@ -226,34 +189,40 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
         unsafe { bela_sys::Bela_stopRequested() != 0 }
     }
 
-    /// Takes a _mutable reference_ to the task, because we must be ensured that
-    /// the task is unique and that it does not move.
-    ///
-    /// # Safety
-    /// I highly recommend ONLY USING STACK-ALLOCATED CLOSURES AS TASKS. This
-    /// particular implementation is wildly unsafe, but if you use a stack
-    /// closure it _should_ be possible to avoid a segfault. See the
-    /// auxiliary_task example for a demo.
-    pub unsafe fn create_auxiliary_task<'b, 'c, A: 'b>(
-        task: &'c mut A,
+    /// Create an auxiliary task that runs on a lower-priority thread
+    /// `name` must be globally unique across all Xenomai processes!
+    pub fn create_auxiliary_task<Auxiliary>(
+        task: Box<Auxiliary>,
         priority: i32,
-        name: &'static str,
-    ) -> CreatedTask<'b>
+        name: &str,
+    ) -> CreatedTask
     where
-        A: Auxiliary,
+        Auxiliary: FnMut() + Send + 'static,
     {
-        let task_ptr = task as *const _ as *mut std::os::raw::c_void;
+        // TODO: Bela API does not currently offer an API to stop and unregister a task,
+        // so we can only leak the task. Otherwise, we could `Box::into_raw` here, store the
+        // raw pointer in `CreatedTask` and drop it after unregistering & joining the thread
+        // using `Box::from_raw`.
+        let task_ptr = Box::leak(task) as *mut _ as *mut _;
 
-        let aux_task = {
+        extern "C" fn auxiliary_task_trampoline<Auxiliary>(aux_ptr: *mut std::os::raw::c_void)
+        where
+            Auxiliary: FnMut() + Send + 'static,
+        {
+            let task_ptr = unsafe { &mut *(aux_ptr as *mut Auxiliary) };
+            task_ptr();
+        }
+
+        let aux_task = unsafe {
             bela_sys::Bela_createAuxiliaryTask(
-                Some(auxiliary_task_trampoline::<A>),
+                Some(auxiliary_task_trampoline::<Auxiliary>),
                 priority,
                 name.as_bytes().as_ptr(),
                 task_ptr,
             )
         };
 
-        CreatedTask(aux_task, PhantomData)
+        CreatedTask(aux_task)
     }
 
     pub fn schedule_auxiliary_task(task: &CreatedTask) -> Result<(), error::Error> {
