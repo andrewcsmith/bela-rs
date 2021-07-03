@@ -194,7 +194,7 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
     pub fn create_auxiliary_task<Auxiliary>(
         task: Box<Auxiliary>,
         priority: i32,
-        name: &str,
+        name: &std::ffi::CStr,
     ) -> CreatedTask
     where
         Auxiliary: FnMut() + Send + 'static,
@@ -217,7 +217,7 @@ impl<'a, T: UserData<'a> + 'a> Bela<T> {
             bela_sys::Bela_createAuxiliaryTask(
                 Some(auxiliary_task_trampoline::<Auxiliary>),
                 priority,
-                name.as_bytes().as_ptr(),
+                name.as_ptr(),
                 task_ptr,
             )
         };

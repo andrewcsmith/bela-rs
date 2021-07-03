@@ -33,12 +33,12 @@ fn go() -> Result<(), error::Error> {
         user_data.tasks.push(BelaApp::create_auxiliary_task(
             print_task,
             10,
-            "printing_stuff",
+            &std::ffi::CString::new("printing_stuff").unwrap(),
         ));
         user_data.tasks.push(BelaApp::create_auxiliary_task(
             another_print_task,
             10,
-            "printing_more_stuff",
+            &std::ffi::CStr::from_bytes_with_nul(b"printing_more_stuff\0").unwrap(),
         ));
         Ok(())
     };
