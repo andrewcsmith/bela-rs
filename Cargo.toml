@@ -1,7 +1,12 @@
 [package]
 name = "bela"
 version = "0.1.0"
-authors = ["Andrew C. Smith <andrewchristophersmith@gmail.com>"]
+authors = [
+	"Andrew C. Smith <andrewchristophersmith@gmail.com>",
+	"Johannes S. Mueller-Roemer <j.s.mueller-roemer@gmx.net>",
+	"Paul Adenot <paul@paul.cx>",
+]
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 
